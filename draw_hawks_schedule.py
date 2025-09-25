@@ -606,19 +606,6 @@ def _format_next_bottom(
     Always include the time:
       "Today 7:30 PM", "Tonight 7:30 PM", "Tomorrow 6:00 PM", or "Wed Sep 24 7:30 PM".
     """
-    if callable(_MLB_FORMAT_GAME_LABEL):
-        start = start_time_central
-
-        if not start and game_date_iso:
-            try:
-                dt_utc = dt.datetime.fromisoformat(game_date_iso.replace("Z", "+00:00"))
-                local = dt_utc.astimezone()
-                start = local.strftime("%-I:%M %p") if os.name != "nt" else local.strftime("%#I:%M %p")
-            except Exception:
-                start = None
-
-        return _MLB_FORMAT_GAME_LABEL(official_date, start or "")
-
     local = None
     if game_date_iso:
         try:
@@ -632,16 +619,27 @@ def _format_next_bottom(
     if not official and local:
         official = local.date().isoformat()
 
+    # Determine a human readable start time we can pass to MLB or use locally.
+    start = (start_time_central or "").strip()
+    if not start and local:
+        try:
+            start = local.strftime("%-I:%M %p") if os.name != "nt" else local.strftime("%#I:%M %p")
+        except Exception:
+            start = ""
+    if not start and game_date_iso:
+        try:
+            dt_utc = dt.datetime.fromisoformat(game_date_iso.replace("Z", "+00:00"))
+            start_local = dt_utc.astimezone()
+            start = (
+                start_local.strftime("%-I:%M %p")
+                if os.name != "nt"
+                else start_local.strftime("%#I:%M %p")
+            )
+        except Exception:
+            start = ""
+
     if callable(_MLB_FORMAT_GAME_LABEL):
-        start = start_time_central
-
-        if not start and local:
-            try:
-                start = local.strftime("%-I:%M %p") if os.name != "nt" else local.strftime("%#I:%M %p")
-            except Exception:
-                start = None
-
-        return _MLB_FORMAT_GAME_LABEL(official, start or "")
+        return _MLB_FORMAT_GAME_LABEL(official, start)
 
     if local is None and official:
         try:
