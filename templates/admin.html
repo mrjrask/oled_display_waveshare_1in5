@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OLED Admin</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 1rem auto; line-height: 1.4; }
+    h1 { font-size: 1.2rem; margin: 1rem 0 0.5rem; }
+
+    /* Multi-column grid for screen selectors */
+    .screens-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.4rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .screens-grid label {
+      display: flex;
+      align-items: center;
+      font-size: 0.9rem;
+      background: #f5f5f5;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+    }
+    .screens-grid input {
+      margin-right: 0.5rem;
+      flex-shrink: 0;
+    }
+    .screens-grid img.thumb {
+      width: 24px;
+      height: 24px;
+      object-fit: cover;
+      margin-left: auto;
+      border: 1px solid #ccc;
+      border-radius: 2px;
+    }
+
+    /* Logs layout */
+    #logs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .log-panel {
+      flex: 1 1 300px;
+      max-width: 45%;
+    }
+    .log-panel strong {
+      display: block;
+      margin-bottom: 0.3rem;
+      font-size: 0.95rem;
+    }
+    .log-panel pre {
+      height: 200px;
+      overflow: auto;
+      background: #f9f9f9;
+      border: 1px solid #ccc;
+      padding: 0.5rem;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      background: #007bff;
+      color: white;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>OLED Screens Configuration</h1>
+  <form id="screens-form">
+    <div class="screens-grid">
+      {% for key, enabled in screens %}
+      <label data-screen="{{ key }}">
+        <input type="checkbox" name="screens[{{ key }}]" {% if enabled %}checked{% endif %}>
+        {{ key }}
+        <img id="thumb-{{ key.replace(' ', '_') }}" class="thumb" alt="">
+      </label>
+      {% endfor %}
+    </div>
+    <button type="submit">Save</button>
+  </form>
+
+  <h1>Logs</h1>
+  <div id="logs">
+    <div class="log-panel">
+      <strong>Display Service</strong>
+      <pre id="log-Display">Loading…</pre>
+    </div>
+    <div class="log-panel">
+      <strong>Admin Service</strong>
+      <pre id="log-Admin">Loading…</pre>
+    </div>
+  </div>
+
+  <script>
+    // Load thumbnails
+    document.querySelectorAll('.screens-grid label').forEach(lbl => {
+      const key = lbl.dataset.screen;
+      const thumb = document.getElementById('thumb-' + key.replace(/ /g,'_'));
+      fetch(`/api/screenshots/${key.replace(/ /g,'_')}`)
+        .then(r => r.json())
+        .then(list => {
+          if (list.length) {
+            thumb.src = `/screenshots/${list[0]}`;
+          } else {
+            thumb.style.display = 'none';
+          }
+        });
+    });
+
+    // Save config
+    document.getElementById('screens-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const data = {};
+      document.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        const key = cb.name.match(/^screens\[(.*)\]$/)[1];
+        data[key] = cb.checked;
+      });
+      fetch('/save_config', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({screens:data})
+      })
+      .then(r => r.json())
+      .then(res => alert(res.status==='success' ? 'Configuration saved.' : 'Error: '+res.message));
+    });
+
+    // Load logs
+    fetch('/logs')
+      .then(r => r.json())
+      .then(obj => {
+        for (const [name, text] of Object.entries(obj)) {
+          const pre = document.getElementById('log-' + name);
+          if (pre) pre.textContent = text;
+        }
+      });
+  </script>
+</body>
+</html>

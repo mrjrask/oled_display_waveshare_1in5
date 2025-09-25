@@ -1,0 +1,396 @@
+#!/usr/bin/env python3
+"""
+draw_hawks_schedule.py
+
+Blackhawks screens:
+  • Last game
+  • Live game
+  • Next game  (title: "Next Hawks Game...")
+Robust to NHL API variations and shows local SVG logos from images/nhl/*.svg
+with NHL.jpg as fallback.
+
+Opponent line shows "@ Team" if Hawks are away, and "vs. Team" if Hawks are home.
+Opponent text wraps to at most two lines.
+"""
+
+import os
+import io
+import logging
+import datetime
+from typing import Optional, Tuple
+
+from PIL import Image, ImageDraw
+
+import config
+from utils import clear_display, wrap_text
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paths / constants
+SCRIPT_DIR     = os.path.dirname(os.path.abspath(__file__))
+IMAGES_DIR     = os.path.join(SCRIPT_DIR, "images")
+NHL_LOGOS_DIR  = os.path.join(IMAGES_DIR, "nhl")
+FALLBACK_LOGO  = os.path.join(NHL_LOGOS_DIR, "NHL.jpg")
+
+TITLE_FONT = getattr(config, "FONT_TITLE_SPORTS", None) or getattr(config, "FONT_DATE_SPORTS")
+TEAM_FONT  = getattr(config, "FONT_TEAM_SPORTS",  None) or getattr(config, "FONT_DATE_SPORTS")
+DATE_FONT  = getattr(config, "FONT_DATE_SPORTS",  None) or getattr(config, "FONT_TEAM_SPORTS")
+
+LOGO_H        = 32
+BOTTOM_MARGIN = 4
+
+# Map full names → 3-letter abbr (files exist as *_dark.svg / *_light.svg)
+NHL_NAME_TO_ABBR = {
+    "Anaheim Ducks": "ANA",
+    "Boston Bruins": "BOS",
+    "Buffalo Sabres": "BUF",
+    "Carolina Hurricanes": "CAR",
+    "Columbus Blue Jackets": "CBJ",
+    "Calgary Flames": "CGY",
+    "Chicago Blackhawks": "CHI",
+    "Colorado Avalanche": "COL",
+    "Dallas Stars": "DAL",
+    "Detroit Red Wings": "DET",
+    "Edmonton Oilers": "EDM",
+    "Florida Panthers": "FLA",
+    "Los Angeles Kings": "LAK",
+    "Minnesota Wild": "MIN",
+    "Montréal Canadiens": "MTL",
+    "New Jersey Devils": "NJD",
+    "Nashville Predators": "NSH",
+    "New York Islanders": "NYI",
+    "New York Rangers": "NYR",
+    "Ottawa Senators": "OTT",
+    "Philadelphia Flyers": "PHI",
+    "Pittsburgh Penguins": "PIT",
+    "Seattle Kraken": "SEA",
+    "San Jose Sharks": "SJS",
+    "St. Louis Blues": "STL",
+    "Tampa Bay Lightning": "TBL",
+    "Toronto Maple Leafs": "TOR",
+    "Utah Hockey Club": "UTA",
+    "Vancouver Canucks": "VAN",
+    "Vegas Golden Knights": "VGK",
+    "Winnipeg Jets": "WPG",
+    "Washington Capitals": "WSH",
+}
+
+SHORT_TO_FULL = {
+    "Blackhawks": "Chicago Blackhawks",
+    "Red Wings": "Detroit Red Wings",
+    "Kings": "Los Angeles Kings",
+    "Canadiens": "Montréal Canadiens",
+    "Leafs": "Toronto Maple Leafs",
+    "Penguins": "Pittsburgh Penguins",
+    "Rangers": "New York Rangers",
+    "Islanders": "New York Islanders",
+    "Devils": "New Jersey Devils",
+    "Lightning": "Tampa Bay Lightning",
+    "Panthers": "Florida Panthers",
+    "Sabres": "Buffalo Sabres",
+    "Bruins": "Boston Bruins",
+    "Senators": "Ottawa Senators",
+    "Flyers": "Philadelphia Flyers",
+    "Capitals": "Washington Capitals",
+    "Jackets": "Columbus Blue Jackets",
+    "Hurricanes": "Carolina Hurricanes",
+    "Predators": "Nashville Predators",
+    "Blues": "St. Louis Blues",
+    "Jets": "Winnipeg Jets",
+    "Ducks": "Anaheim Ducks",
+    "Sharks": "San Jose Sharks",
+    "Kraken": "Seattle Kraken",
+    "Canucks": "Vancouver Canucks",
+    "Flames": "Calgary Flames",
+    "Oilers": "Edmonton Oilers",
+    "Stars": "Dallas Stars",
+    "Avalanche": "Colorado Avalanche",
+    "Golden Knights": "Vegas Golden Knights",
+    "Wild": "Minnesota Wild",
+    "Utah": "Utah Hockey Club",
+    "Mammoth": "Utah Hockey Club",
+}
+
+# Abbreviation → full (for when API gives CHI/DET etc.)
+ABBR_TO_FULL = {abbr: full for full, abbr in NHL_NAME_TO_ABBR.items()}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Name parsing / mapping
+
+def _unwrap_team(obj) -> dict:
+    """Some feeds put the team under {'team': {...}}."""
+    if not isinstance(obj, dict):
+        return {}
+    return obj.get("team", obj)
+
+def _team_display_name(team_obj: dict) -> str:
+    """
+    Return a human-friendly team name (full if we can map it).
+    Accepts many shapes/fields from NHL feeds.
+    """
+    t = _unwrap_team(team_obj)
+    # Prefer explicit abbreviation if present and we can map it back to full
+    for key in ("abbrev", "abbreviation", "triCode", "tricode"):
+        v = t.get(key)
+        if isinstance(v, str) and v.strip():
+            ab = v.strip().upper()
+            return ABBR_TO_FULL.get(ab, ab)
+
+    # commonName may be dict {default: "..."}
+    cn = t.get("commonName")
+    if isinstance(cn, dict) and cn.get("default"):
+        return cn["default"]
+
+    for k in ("commonName", "name", "teamName", "shortName"):
+        v = t.get(k)
+        if isinstance(v, str) and v.strip():
+            s = v.strip()
+            # Expand nickname to full if we know it
+            return SHORT_TO_FULL.get(s, s)
+
+    return "UNK"
+
+def _abbr_for_team(name: str) -> str:
+    """Normalize to full name if needed, then return our 3-letter abbr."""
+    if not name or name == "UNK":
+        return ""
+    if name in NHL_NAME_TO_ABBR:
+        return NHL_NAME_TO_ABBR[name]
+    # If API gave us a 3-letter code already
+    if len(name) in (2,3,4) and name.upper() in ABBR_TO_FULL:
+        return name.upper()
+    # If it's a nickname, expand
+    full = SHORT_TO_FULL.get(name, name)
+    return NHL_NAME_TO_ABBR.get(full, "")
+
+def _extract_teams(game: dict) -> Optional[Tuple[dict, dict]]:
+    """Return (away_team, home_team) dicts or None."""
+    if not isinstance(game, dict):
+        return None
+    away = game.get("awayTeam") or game.get("away_team") or (game.get("teams") or {}).get("away")
+    home = game.get("homeTeam") or game.get("home_team") or (game.get("teams") or {}).get("home")
+    if not isinstance(away, dict) or not isinstance(home, dict):
+        return None
+    return away, home
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Time/label helpers
+
+def _format_rel_label(official_date: str, start_time_central: str) -> str:
+    """
+    'Tonight 7:30 PM', 'Today 1:00 PM', 'Tomorrow 6:00 PM', 'Yesterday',
+    else 'Tue 9/9'.
+    """
+    today = datetime.datetime.now(config.CENTRAL_TIME).date()
+    d = None
+    try:
+        d = datetime.datetime.strptime((official_date or "")[:10], "%Y-%m-%d").date()
+    except Exception:
+        pass
+    if not d:
+        return start_time_central or "TBD"
+
+    rel = None
+    if d == today:
+        rel = "Today"
+    elif d == today + datetime.timedelta(days=1):
+        rel = "Tomorrow"
+    elif d == today - datetime.timedelta(days=1):
+        rel = "Yesterday"
+
+    if rel == "Today":
+        try:
+            t = datetime.datetime.strptime((start_time_central or "").strip(), "%I:%M %p").time()
+            if t >= datetime.time(17, 0):
+                rel = "Tonight"
+        except Exception:
+            pass
+
+    if not rel:
+        return f"{d.strftime('%a')} {d.month}/{d.day}"
+
+    st = (start_time_central or "").strip().upper()
+    if st and st != "TBD" and rel != "Yesterday":
+        return f"{rel} {start_time_central}"
+    return rel
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logo loading
+
+def _open_svg_to_rgba(path: str) -> Optional[Image.Image]:
+    try:
+        import cairosvg
+    except Exception:
+        return None
+    try:
+        png_bytes = cairosvg.svg2png(url=path)
+        return Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+    except Exception:
+        return None
+
+def _load_logo(abbr: str, height: int = LOGO_H) -> Optional[Image.Image]:
+    """Prefer PNG if present, else *_dark.svg, *_light.svg, *.svg, then NHL.jpg."""
+    if not abbr:
+        return _fallback_logo(height)
+    candidates = [
+        f"{abbr}.png",
+        f"{abbr}_dark.svg",
+        f"{abbr}_light.svg",
+        f"{abbr}.svg",
+    ]
+    for fn in candidates:
+        p = os.path.join(NHL_LOGOS_DIR, fn)
+        if not os.path.exists(p):
+            continue
+        if fn.lower().endswith(".png"):
+            try:
+                img = Image.open(p).convert("RGBA")
+                w0, h0 = img.size
+                r = height / float(h0)
+                return img.resize((max(1, int(w0*r)), height), Image.ANTIALIAS)
+            except Exception:
+                continue
+        else:
+            img = _open_svg_to_rgba(p)
+            if img:
+                w0, h0 = img.size
+                r = height / float(h0)
+                return img.resize((max(1, int(w0*r)), height), Image.ANTIALIAS)
+    return _fallback_logo(height)
+
+def _fallback_logo(height: int) -> Optional[Image.Image]:
+    try:
+        img = Image.open(FALLBACK_LOGO).convert("RGBA")
+        w0, h0 = img.size
+        r = height / float(h0)
+        return img.resize((max(1, int(w0*r)), height), Image.ANTIALIAS)
+    except Exception:
+        return None
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Core renderer
+
+def _draw_core(game: dict, title: str, display, *, transition=False) -> Optional[Image.Image]:
+    if not isinstance(game, dict):
+        logging.warning("draw_hawks: no game payload; skipping")
+        return None
+
+    teams = _extract_teams(game)
+    if not teams:
+        logging.warning("draw_hawks: teams missing; skipping")
+        return None
+    away_obj, home_obj = teams
+
+    # Names and abbrs
+    away_name = _team_display_name(away_obj) or "UNK"
+    home_name = _team_display_name(home_obj) or "UNK"
+    away_abbr = _abbr_for_team(away_name)
+    home_abbr = _abbr_for_team(home_name)
+
+    # Hawks home/away?
+    is_hawks_away = (away_name == "Chicago Blackhawks" or away_abbr == "CHI")
+    is_hawks_home = (home_name == "Chicago Blackhawks" or home_abbr == "CHI")
+
+    # Opponent + prefix for the text line under title
+    if is_hawks_away:
+        prefix = "@"
+        opponent = home_name
+    elif is_hawks_home:
+        prefix = "vs."
+        opponent = away_name
+    else:
+        # If neither is Hawks (odd payload), show as away @ home
+        prefix = "@"
+        opponent = home_name
+
+    # Logos
+    logo_away = _load_logo(away_abbr, LOGO_H)
+    logo_home = _load_logo(home_abbr, LOGO_H)
+
+    # Bottom label with relative wording + time
+    official_date = game.get("officialDate") or game.get("gameDate") or (game.get("startTimeUTC","")[:10])
+    start_time_central = game.get("startTimeCentral", "TBD")
+    bottom = _format_rel_label(official_date or "", start_time_central)
+
+    # Canvas
+    img  = Image.new("RGB", (config.WIDTH, config.HEIGHT), "black")
+    draw = ImageDraw.Draw(img)
+
+    # Title
+    tw, th = draw.textsize(title, font=TITLE_FONT)
+    draw.text(((config.WIDTH - tw)//2, 0), title, font=TITLE_FONT, fill=(255,255,255))
+
+    # Opponent line (wrap to 2 lines max)
+    opp_text = f"{prefix} {opponent}".strip()
+    lines = wrap_text(opp_text, TEAM_FONT, config.WIDTH)[:2] or [opp_text]
+    y_text = th + 4
+    for ln in lines:
+        lw, lh = draw.textsize(ln, font=TEAM_FONT)
+        draw.text(((config.WIDTH - lw)//2, y_text), ln, font=TEAM_FONT, fill=(255,255,255))
+        y_text += lh + 1
+
+    # Logos row with '@' between them; guard for None
+    elems = []
+    if logo_away: elems.append(("img", logo_away))
+    elems.append(("text", "@"))
+    if logo_home: elems.append(("img", logo_home))
+
+    spacing = 8
+    widths = []
+    for tp, obj in elems:
+        if tp == "img" and isinstance(obj, Image.Image):
+            widths.append(obj.width)
+        else:
+            widths.append(draw.textsize(obj, font=TEAM_FONT)[0])
+    total_w = sum(widths) + spacing*(len(widths)-1)
+    x0 = (config.WIDTH - total_w)//2
+
+    bl_w, bl_h = draw.textsize(bottom, font=DATE_FONT)
+    bottom_y   = config.HEIGHT - bl_h - BOTTOM_MARGIN
+
+    block_h = 0
+    for tp, obj in elems:
+        if tp == "img" and isinstance(obj, Image.Image):
+            block_h = max(block_h, obj.height)
+        else:
+            block_h = max(block_h, draw.textsize(obj, font=TEAM_FONT)[1])
+
+    logo_y = y_text + ((bottom_y - y_text) - block_h)//2
+    x = x0
+    for (tp, obj), w in zip(elems, widths):
+        if tp == "img" and isinstance(obj, Image.Image):
+            img.paste(obj, (x, logo_y), obj)
+        else:
+            h = draw.textsize(obj, font=TEAM_FONT)[1]
+            draw.text((x, logo_y + (block_h - h)//2), obj, font=TEAM_FONT, fill=(255,255,255))
+        x += w + spacing
+
+    # Bottom label
+    draw.text(((config.WIDTH - bl_w)//2, bottom_y), bottom, font=DATE_FONT, fill=(255,255,255))
+
+    if transition:
+        return img
+    clear_display(display)
+    display.image(img)
+    display.show()
+    return None
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public entry points (used by main.py)
+
+def draw_last_hawks_game(display, game, transition=False):
+    if not game:
+        logging.warning("draw_last_hawks_game: no payload")
+        return None
+    return _draw_core(game, "Last Hawks Game...", display, transition=transition)
+
+def draw_live_hawks_game(display, game, transition=False):
+    if not game:
+        logging.warning("draw_live_hawks_game: no live game")
+        return None
+    return _draw_core(game, "Hawks Live...", display, transition=transition)
+
+def draw_sports_screen_hawks(display, game, transition=False):
+    if not game:
+        logging.warning("draw_sports_screen_hawks: no next game")
+        return None
+    return _draw_core(game, "Next Hawks Game...", display, transition=transition)
