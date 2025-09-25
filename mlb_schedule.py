@@ -9,6 +9,7 @@ import os
 import time
 import logging
 import datetime
+from typing import Optional, Tuple
 from PIL import Image, ImageDraw, Image
 
 from config import (
@@ -47,24 +48,97 @@ FLAG_BLOCK_H            = SMALL_RESULT_FLAG_H + FLAG_BLOCK_PAD  # reserved area 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _format_game_label(official_date: str, start_time: str) -> str:
-    """Generic bottom label (date + time) for NEXT/LIVE screens."""
-    try:
-        dt = datetime.datetime.strptime(official_date, "%Y-%m-%d")
-        day = dt.strftime("%a")
-        date = f"{dt.month}/{dt.day}"
-    except Exception:
-        day = ""
-        date = official_date or ""
-    t = (start_time or "").strip()
-    parts = t.split()
-    tm = parts[0] if parts else ""
-    ampm = parts[1] if len(parts) > 1 else ""
-    if tm.startswith("0"):
-        tm = tm[1:]
-    if tm.endswith(":00"):
-        tm = tm[:-3]
-    time_str = f"{tm} {ampm}".strip()
-    return " ".join(p for p in (day, date, time_str) if p)
+    """Bottom label for next-game screens with relative-day logic."""
+
+    def _parse_date(value: str) -> Optional[datetime.date]:
+        value = (value or "").strip()
+        if not value:
+            return None
+        try:
+            return datetime.date.fromisoformat(value[:10])
+        except Exception:
+            return None
+
+    def _parse_time(parts: list[str]) -> Tuple[Optional[datetime.time], str]:
+        time_token = ""
+        ampm_token = ""
+        for part in parts:
+            if not time_token:
+                time_token = part
+                continue
+            if not ampm_token and part.upper() in {"AM", "PM"}:
+                ampm_token = part.upper()
+                break
+        if time_token and ampm_token:
+            for fmt in ("%I:%M %p", "%I %p"):
+                try:
+                    tm = datetime.datetime.strptime(f"{time_token} {ampm_token}", fmt).time()
+                    break
+                except Exception:
+                    tm = None
+            else:
+                tm = None
+        else:
+            tm = None
+
+        # Build a display string resembling the old formatting.
+        disp_time = time_token
+        if disp_time.startswith("0"):
+            disp_time = disp_time[1:]
+        if disp_time.endswith(":00"):
+            disp_time = disp_time[:-3]
+        display = " ".join(p for p in (disp_time, ampm_token) if p).strip()
+        return tm, display
+
+    date_obj = _parse_date(official_date)
+    start_raw = (start_time or "").strip()
+    parts = start_raw.split()
+    time_obj, time_display = _parse_time(parts)
+
+    # If we still do not have a friendly time string, just use the raw input.
+    if not time_display:
+        time_display = start_raw
+
+    local_dt = None
+    if date_obj:
+        try:
+            if time_obj:
+                local_dt = CENTRAL_TIME.localize(
+                    datetime.datetime.combine(date_obj, time_obj)
+                )
+            else:
+                # Default to an evening time purely for relative label purposes.
+                local_dt = CENTRAL_TIME.localize(
+                    datetime.datetime.combine(date_obj, datetime.time(19, 0))
+                )
+        except Exception:
+            local_dt = None
+
+    today = datetime.datetime.now(CENTRAL_TIME)
+    label = ""
+    if local_dt:
+        game_date = local_dt.date()
+        if game_date == today.date():
+            if time_obj and local_dt.hour >= 18:
+                label = "Tonight"
+            else:
+                label = "Today"
+        elif game_date == today.date() + datetime.timedelta(days=1):
+            label = "Tomorrow"
+        else:
+            if os.name == "nt":
+                label = game_date.strftime("%a %b %#d")
+            else:
+                label = game_date.strftime("%a %b %-d")
+    elif date_obj:
+        if os.name == "nt":
+            label = date_obj.strftime("%a %b %#d")
+        else:
+            label = date_obj.strftime("%a %b %-d")
+
+    if label and time_display:
+        return f"{label} {time_display}".strip()
+    return label or time_display or ""
 
 def _rel_date_only(official_date: str) -> str:
     """'Today', 'Tomorrow', 'Yesterday', else 'Tue M/D' (no time)."""
