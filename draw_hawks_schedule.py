@@ -403,6 +403,75 @@ def _center_text(d: ImageDraw.ImageDraw, y: int, s: str, font: ImageFont.ImageFo
     d.text((x, y), s, font=font, fill="white")
 
 
+def _center_wrapped_text(
+    d: ImageDraw.ImageDraw,
+    y: int,
+    s: str,
+    font: ImageFont.ImageFont,
+    *,
+    max_width: Optional[int] = None,
+    line_spacing: int = 1,
+) -> int:
+    """Draw text centered on the screen, wrapping to additional lines if needed."""
+    if not s:
+        return 0
+
+    max_width = min(max_width or WIDTH, WIDTH)
+
+    text_h = _text_h(d, font)
+
+    if _text_w(d, s, font) <= max_width:
+        _center_text(d, y, s, font)
+        return text_h
+
+    words = s.split()
+    if not words:
+        return 0
+
+    lines = []
+    current = words[0]
+
+    for word in words[1:]:
+        candidate = f"{current} {word}" if current else word
+        if _text_w(d, candidate, font) <= max_width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word
+
+    if current:
+        lines.append(current)
+
+    # If any individual word is wider than the max width, fall back to character wrapping.
+    fixed_lines = []
+    for line in lines:
+        if _text_w(d, line, font) <= max_width:
+            fixed_lines.append(line)
+            continue
+
+        chunk = ""
+        for ch in line:
+            test = f"{chunk}{ch}"
+            if chunk and _text_w(d, test, font) > max_width:
+                fixed_lines.append(chunk)
+                chunk = ch
+            else:
+                chunk = test
+        if chunk:
+            fixed_lines.append(chunk)
+
+    lines = fixed_lines or lines
+
+    total_height = 0
+    for idx, line in enumerate(lines):
+        line_y = y + idx * (text_h + line_spacing)
+        _center_text(d, line_y, line, font)
+        total_height = (idx + 1) * text_h + idx * line_spacing
+
+    return total_height
+
+
 def _draw_title_line(
     img: Image.Image,
     d: ImageDraw.ImageDraw,
@@ -700,8 +769,8 @@ def _draw_next_card(display, game: Dict, *, transition: bool=False):
     opp_full = _team_full_name(raw_home if is_hawks_away else raw_away) or (home_tri if is_hawks_away else away_tri)
     prefix   = "@ " if is_hawks_away else "vs. " if is_hawks_home else ""
     opp_line = f"{prefix}{opp_full or '—'}"
-    _center_text(d, y_top, opp_line, FONT_ABBR)
-    y_top += _text_h(d, FONT_ABBR) + 1
+    wrapped_h = _center_wrapped_text(d, y_top, opp_line, FONT_ABBR, max_width=WIDTH - 4)
+    y_top += wrapped_h + 1 if wrapped_h else _text_h(d, FONT_ABBR) + 1
 
     # Bottom label text (we need its height to avoid overlap)
     official_date = game.get("officialDate") or ""
