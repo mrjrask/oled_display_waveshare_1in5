@@ -34,6 +34,7 @@ MLB_LOGOS_DIR = os.path.join(IMAGES_DIR, "mlb")
 
 # ── Layout constants ─────────────────────────────────────────────────────────
 BOTTOM_MARGIN           = 4          # keep bottom text safely on-screen
+TITLE_TO_HEADER_GAP     = 6          # space between title baseline and header labels
 HEADER_GAP              = 3          # space between R/H/E labels and grid
 TABLE_SIDE_MARGIN       = 4          # left/right inset of table
 MIN_TEAM_COL_WIDTH      = 40         # never let the team column be narrower
@@ -267,7 +268,7 @@ def _draw_boxscore_table(img: Image.Image, draw: ImageDraw.ImageDraw, title: str
     bottom_y = HEIGHT - bh - BOTTOM_MARGIN
 
     # Geometry
-    g = _compute_table_geometry(draw, top_y=th + 2, bottom_y=bottom_y,
+    g = _compute_table_geometry(draw, top_y=th + TITLE_TO_HEADER_GAP, bottom_y=bottom_y,
                                 reserve_flag_block=reserve_flag_block)
     hdr_h   = g["hdr_h"]
     grid_top= g["grid_top"]
