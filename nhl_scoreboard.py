@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
+import socket
 import time
 from typing import Any, Dict, Iterable, Optional
 
@@ -52,8 +53,8 @@ COL_X = [0]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT  = clone_font(FONT_TEAM_SPORTS, 14)
-STATUS_FONT = clone_font(FONT_STATUS, 13)
+SCORE_FONT  = clone_font(FONT_TEAM_SPORTS, 18)
+STATUS_FONT = clone_font(FONT_STATUS, 15)
 CENTER_FONT = clone_font(FONT_STATUS, 15)
 TITLE_FONT  = FONT_TITLE_SPORTS
 LOGO_HEIGHT = 22
@@ -62,6 +63,10 @@ LOGO_DIR    = os.path.join(IMAGES_DIR, "nhl")
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 
 _SESSION = get_session()
+
+STATSAPI_HOST = "statsapi.web.nhl.com"
+_DNS_RETRY_INTERVAL = 600  # seconds
+_dns_block_until = 0.0
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -485,7 +490,35 @@ def _hydrate_games(raw_games: Iterable[dict]) -> list[dict]:
     return games
 
 
+def _statsapi_available() -> bool:
+    """Return True when the statsapi host resolves or a retry window has elapsed."""
+
+    global _dns_block_until
+
+    now = time.time()
+    if now < _dns_block_until:
+        return False
+
+    try:
+        socket.getaddrinfo(STATSAPI_HOST, None)
+    except socket.gaierror as exc:
+        logging.warning("NHL statsapi DNS lookup failed: %s", exc)
+        _dns_block_until = now + _DNS_RETRY_INTERVAL
+        return False
+    except Exception as exc:  # defensive guard against unexpected errors
+        logging.debug("Unexpected error checking NHL statsapi DNS: %s", exc)
+    else:
+        _dns_block_until = 0.0
+        return True
+
+    return True
+
+
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
+    if not _statsapi_available():
+        logging.info("Using api-web NHL scoreboard endpoint for %s (statsapi DNS failure)", day)
+        return _fetch_games_api_web(day)
+
     stats_url = (
         "https://statsapi.web.nhl.com/api/v1/schedule"
         f"?date={day.isoformat()}&expand=schedule.linescore,schedule.teams"
