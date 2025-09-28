@@ -13,7 +13,7 @@ import datetime
 import logging
 import os
 import time
-from typing import Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 import requests
 from PIL import Image, ImageDraw
@@ -45,6 +45,7 @@ SCROLL_DELAY        = 0.04
 SCROLL_PAUSE_TOP    = 0.75
 SCROLL_PAUSE_BOTTOM = 0.5
 REQUEST_TIMEOUT     = 10
+API_WEB_SCOREBOARD_URL = "https://api-web.nhle.com/v1/scoreboard/{date}"
 
 COL_WIDTHS = [28, 24, 24, 24, 28]  # total = 128
 COL_X = [0]
@@ -242,6 +243,231 @@ def _timestamp_to_local(ts: str) -> Optional[datetime.datetime]:
         return None
 
 
+def _ordinal_from_number(num: Any) -> str:
+    try:
+        value = int(num)
+    except Exception:
+        if isinstance(num, str) and num.strip():
+            return num.strip().upper()
+        return ""
+
+    if value <= 0:
+        return ""
+    if value == 1:
+        return "1ST"
+    if value == 2:
+        return "2ND"
+    if value == 3:
+        return "3RD"
+    return f"{value}TH"
+
+
+def _normalize_team_name(team: Dict[str, Any]) -> Optional[str]:
+    name = team.get("name") or team.get("teamName")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    if isinstance(name, dict):
+        for key in ("default", "en", "name"):
+            value = name.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    place = team.get("placeName")
+    nickname = None
+    if isinstance(place, dict):
+        for key in ("default", "en"):
+            value = place.get(key)
+            if isinstance(value, str) and value.strip():
+                nickname = value.strip()
+                break
+    elif isinstance(place, str) and place.strip():
+        nickname = place.strip()
+    if nickname:
+        club = team.get("clubName") or team.get("commonName")
+        if isinstance(club, dict):
+            for key in ("default", "en"):
+                value = club.get(key)
+                if isinstance(value, str) and value.strip():
+                    return f"{nickname} {value.strip()}".strip()
+        if isinstance(club, str) and club.strip():
+            return f"{nickname} {club.strip()}".strip()
+    return None
+
+
+def _map_api_web_team(team: Dict[str, Any]) -> Dict[str, Any]:
+    team = team or {}
+    abbr = None
+    for key in ("abbrev", "triCode", "abbreviation", "teamTricode"):
+        value = team.get(key)
+        if isinstance(value, str) and value.strip():
+            abbr = value.strip().upper()
+            break
+    team_id = team.get("id") or team.get("teamId")
+    name = _normalize_team_name(team)
+    mapped = {
+        "team": {
+            "id": team_id,
+            "abbreviation": abbr,
+            "triCode": abbr,
+        },
+    }
+    if name:
+        mapped["team"]["name"] = name
+
+    score = team.get("score")
+    if score is None:
+        score = team.get("goals")
+    if score is not None:
+        mapped["score"] = score
+
+    sog = team.get("sog") or team.get("shotsOnGoal") or team.get("shots")
+    if sog is not None:
+        mapped["shotsOnGoal"] = sog
+
+    return mapped
+
+
+def _map_api_web_game(game: Dict[str, Any], day: datetime.date) -> Dict[str, Any]:
+    start_candidates = (
+        game.get("startTimeUTC"),
+        game.get("startTime"),
+        game.get("gameDateTime"),
+        game.get("gameDate"),
+    )
+    game_dt = None
+    for candidate in start_candidates:
+        if not candidate:
+            continue
+        if isinstance(candidate, str):
+            text = candidate.strip()
+            if not text:
+                continue
+            if text.endswith("Z"):
+                fmt = text
+            else:
+                try:
+                    parsed = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                else:
+                    parsed = parsed.astimezone(datetime.timezone.utc)
+                    fmt = parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    game_dt = parsed
+                    break
+            try:
+                parsed = datetime.datetime.strptime(fmt, "%Y-%m-%dT%H:%M:%SZ")
+            except ValueError:
+                continue
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+            game_dt = parsed
+            break
+    if game_dt is None:
+        game_dt = datetime.datetime.combine(day, datetime.time(0, 0), tzinfo=datetime.timezone.utc)
+
+    clock = game.get("clock") or {}
+    period = game.get("periodDescriptor") or {}
+    outcome = game.get("gameOutcome") or {}
+
+    time_remaining = None
+    for key in ("timeRemaining", "time", "displayValue", "remaining", "label"):
+        value = clock.get(key)
+        if value:
+            time_remaining = str(value).upper()
+            break
+
+    intermission = clock.get("inIntermission")
+
+    period_ord = (
+        period.get("ordinalNum")
+        or period.get("ordinal")
+        or _ordinal_from_number(period.get("number"))
+        or _ordinal_from_number(period.get("period"))
+    )
+    if isinstance(period_ord, str):
+        period_ord = period_ord.upper()
+
+    has_shootout = False
+    if isinstance(period.get("periodType"), str) and period["periodType"].strip().upper() == "SO":
+        has_shootout = True
+    if isinstance(outcome.get("lastPeriodType"), str) and outcome["lastPeriodType"].strip().upper() == "SO":
+        has_shootout = True
+
+    game_state = (game.get("gameState") or game.get("gameScheduleState") or "").upper()
+    detailed_state = (game.get("gameStatus") or "").strip()
+    abstract_state = ""
+    status_code = ""
+
+    if game_state in {"LIVE", "CRIT"}:
+        abstract_state = "live"
+        status_code = "3"
+        detailed_state = detailed_state or "In Progress"
+    elif game_state in {"FINAL", "OFF"}:
+        abstract_state = "final"
+        status_code = "4"
+        detailed_state = detailed_state or "Final"
+    elif game_state in {"FUT", "PRE", "SCHEDULED", "PREGAME"}:
+        abstract_state = "preview"
+        status_code = "1"
+        detailed_state = detailed_state or "Scheduled"
+    elif game_state in {"POSTP", "POSTPONED"}:
+        abstract_state = "preview"
+        status_code = "1"
+        detailed_state = "Postponed"
+    else:
+        detailed_state = detailed_state or game_state or "Scheduled"
+
+    linescore = {}
+    if period_ord:
+        linescore["currentPeriodOrdinal"] = period_ord
+    if time_remaining:
+        linescore["currentPeriodTimeRemaining"] = time_remaining
+    if has_shootout:
+        linescore["hasShootout"] = True
+    if intermission is not None:
+        linescore["intermissionInfo"] = {"inIntermission": bool(intermission)}
+
+    mapped = {
+        "gamePk": game.get("id") or game.get("gamePk") or game.get("gameId"),
+        "gameDate": game_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "status": {
+            "abstractGameState": abstract_state,
+            "detailedState": detailed_state,
+        },
+        "teams": {
+            "away": _map_api_web_team(game.get("awayTeam") or game.get("away")),
+            "home": _map_api_web_team(game.get("homeTeam") or game.get("home")),
+        },
+    }
+
+    if status_code:
+        mapped["status"]["statusCode"] = status_code
+    if linescore:
+        mapped["linescore"] = linescore
+
+    return mapped
+
+
+def _fetch_games_api_web(day: datetime.date) -> list[dict]:
+    url = API_WEB_SCOREBOARD_URL.format(date=day.isoformat())
+    try:
+        response = requests.get(url, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as exc:
+        logging.error("Failed to fetch NHL scoreboard fallback: %s", exc)
+        return []
+
+    games_payload = data.get("games") or []
+    mapped_games = []
+    for game in games_payload:
+        if not isinstance(game, dict):
+            continue
+        try:
+            mapped_games.append(_map_api_web_game(game, day))
+        except Exception as exc:  # defensive parsing
+            logging.debug("Skipping api-web game due to error: %s", exc)
+    return _hydrate_games(mapped_games)
+
+
 def _hydrate_games(raw_games: Iterable[dict]) -> list[dict]:
     games: list[dict] = []
     for game in raw_games:
@@ -258,22 +484,27 @@ def _hydrate_games(raw_games: Iterable[dict]) -> list[dict]:
 
 
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
-    url = (
+    stats_url = (
         "https://statsapi.web.nhl.com/api/v1/schedule"
         f"?date={day.isoformat()}&expand=schedule.linescore,schedule.teams"
     )
+    data: Optional[Dict[str, Any]] = None
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
+        response = requests.get(stats_url, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
     except Exception as exc:
         logging.error("Failed to fetch NHL schedule: %s", exc)
-        return []
 
-    raw_games: list[dict] = []
-    for day_info in data.get("dates", []) or []:
-        raw_games.extend(day_info.get("games", []) or [])
-    return _hydrate_games(raw_games)
+    games: list[dict] = []
+    if data:
+        for day_info in data.get("dates", []) or []:
+            games.extend(day_info.get("games", []) or [])
+    if games:
+        return _hydrate_games(games)
+
+    logging.info("Falling back to api-web NHL scoreboard endpoint for %s", day)
+    return _fetch_games_api_web(day)
 
 
 def _render_scoreboard(games: list[dict]) -> Image.Image:
