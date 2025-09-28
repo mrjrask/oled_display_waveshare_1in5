@@ -4,8 +4,8 @@ SCREEN_IDS = [
     "date", "time",
     "weather logo", "weather1", "weather2", "inside"
     "verano logo", "vrnof", "travel",
-    "bears logo", "bears next",
-    "hawks logo", "hawks last", "hawks live", "hawks next",
+    "bears logo", "bears next", "nfl logo", "NFL Scoreboard",
+    "hawks logo", "hawks last", "hawks live", "hawks next", "nhl logo", "NHL Scoreboard",
     "cubs logo", "cubs stand1", "cubs stand2",
     "cubs last", "cubs result", "cubs live", "cubs next",
     "sox logo", "sox stand1", "sox stand2",

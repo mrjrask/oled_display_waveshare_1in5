@@ -84,6 +84,8 @@ from mlb_standings       import (
     draw_AL_WildCard,
 )
 from mlb_scoreboard      import draw_mlb_scoreboard
+from nhl_scoreboard      import draw_nhl_scoreboard
+from nfl_scoreboard      import draw_nfl_scoreboard
 from draw_inside import draw_inside
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
@@ -223,6 +225,8 @@ hawks_logo  = load_logo("hawks.jpg")
 sox_logo    = load_logo("sox.jpg")
 weather_img = load_logo("weather.jpg")
 mlb_logo    = load_logo("mlb.jpg")
+nhl_logo    = load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png")
+nfl_logo    = load_logo("nfl/nfl.png")
 verano_img  = load_logo("verano.jpg")
 bears_logo  = load_logo("bears.png")
 
@@ -283,6 +287,8 @@ def build_screens():
         ("travel",       lambda: draw_travel_time_screen(display, transition=True)),
         ("bears logo",   (lambda: show_logo(bears_logo)) if bears_logo else None),
         ("bears next",   lambda: show_bears_next_game(display, transition=True)),
+        ("nfl logo",     (lambda: show_logo(nfl_logo)) if nfl_logo else None),
+        ("NFL Scoreboard", lambda: draw_nfl_scoreboard(display, transition=True)),
     ]
     screens = [s for s in screens if s]
 
@@ -292,6 +298,8 @@ def build_screens():
             ("hawks last", lambda: draw_last_hawks_game(display, cache["hawks"]["last"], transition=True)),
             ("hawks live", lambda: draw_live_hawks_game(display, cache["hawks"]["live"], transition=True)),
             ("hawks next", lambda: draw_sports_screen_hawks(display, cache["hawks"]["next"], transition=True)),
+            ("nhl logo",   (lambda: show_logo(nhl_logo)) if nhl_logo else None),
+            ("NHL Scoreboard", lambda: draw_nhl_scoreboard(display, transition=True)),
         ]
         screens = [s for s in screens if s]
 
