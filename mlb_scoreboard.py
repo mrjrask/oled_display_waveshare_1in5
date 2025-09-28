@@ -76,14 +76,6 @@ def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
     return logo
 
 
-def _team_text_abbr(team: dict) -> str:
-    raw = (team or {}).get("abbreviation")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip().upper()
-    name = (team or {}).get("name", "")
-    return get_mlb_abbreviation(name).upper()
-
-
 def _team_logo_abbr(team: dict) -> str:
     for key in ("abbreviation", "fileCode"):
         val = (team or {}).get(key)
@@ -99,11 +91,9 @@ def _team_logo_abbr(team: dict) -> str:
 
 
 def _score_string(side: dict) -> tuple[str, Optional[int]]:
-    team = (side or {}).get("team", {})
-    abbr = _team_text_abbr(team)
     score = (side or {}).get("score")
     score_txt = "—" if score is None else str(score)
-    return f"{abbr} {score_txt}".strip(), score if isinstance(score, int) else None
+    return score_txt, score if isinstance(score, int) else None
 
 
 def _final_inning(linescore: dict) -> Optional[int]:
