@@ -15,7 +15,6 @@ import os
 import time
 from typing import Any, Dict, Iterable, Optional
 
-import requests
 from PIL import Image, ImageDraw
 
 from config import (
@@ -33,6 +32,7 @@ from utils import (
     load_team_logo,
     log_call,
 )
+from http_client import NHL_HEADERS, get_session
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE               = "NHL Scoreboard"
@@ -60,6 +60,8 @@ LOGO_HEIGHT = 22
 LOGO_DIR    = os.path.join(IMAGES_DIR, "nhl")
 
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
+
+_SESSION = get_session()
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -449,7 +451,7 @@ def _map_api_web_game(game: Dict[str, Any], day: datetime.date) -> Dict[str, Any
 def _fetch_games_api_web(day: datetime.date) -> list[dict]:
     url = API_WEB_SCOREBOARD_URL.format(date=day.isoformat())
     try:
-        response = requests.get(url, timeout=REQUEST_TIMEOUT)
+        response = _SESSION.get(url, timeout=REQUEST_TIMEOUT, headers=NHL_HEADERS)
         response.raise_for_status()
         data = response.json()
     except Exception as exc:
@@ -490,7 +492,7 @@ def _fetch_games_for_date(day: datetime.date) -> list[dict]:
     )
     data: Optional[Dict[str, Any]] = None
     try:
-        response = requests.get(stats_url, timeout=REQUEST_TIMEOUT)
+        response = _SESSION.get(stats_url, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
     except Exception as exc:
@@ -608,3 +610,4 @@ if __name__ == "__main__":  # pragma: no cover
         draw_nhl_scoreboard(disp)
     finally:
         clear_display(disp)
+
