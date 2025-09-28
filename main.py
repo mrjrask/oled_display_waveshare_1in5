@@ -83,6 +83,7 @@ from mlb_standings       import (
     draw_AL_West,
     draw_AL_WildCard,
 )
+from mlb_scoreboard      import draw_mlb_scoreboard
 from draw_inside import draw_inside
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
@@ -319,6 +320,7 @@ def build_screens():
 
     screens += [
         ("mlb logo",     (lambda: show_logo(mlb_logo)) if mlb_logo else None),
+        ("MLB Scoreboard", lambda: draw_mlb_scoreboard(display, transition=True)),
         ("NL Overview",  lambda: draw_NL_Overview(display, transition=True)),
         ("NL East",      lambda: draw_NL_East(display, transition=True)),
         ("NL Central",   lambda: draw_NL_Central(display, transition=True)),
