@@ -90,10 +90,28 @@ def _team_logo_abbr(team: dict) -> str:
     return ""
 
 
-def _score_string(side: dict) -> tuple[str, Optional[int]]:
+def _should_display_scores(game: dict) -> bool:
+    """Return True when the game's status indicates the scores are real."""
+
+    status = (game or {}).get("status", {}) or {}
+    abstract = (status.get("abstractGameState") or "").lower()
+    detailed = (status.get("detailedState") or "").lower()
+    code = (status.get("statusCode") or "").upper()
+
+    if abstract in {"final", "completed", "live"}:
+        return True
+    if code in {"F", "O", "I"}:  # Final, Over, In-progress
+        return True
+    if "progress" in detailed or "final" in detailed:
+        return True
+    return False
+
+
+def _score_text(side: dict, *, show: bool) -> str:
+    if not show:
+        return "—"
     score = (side or {}).get("score")
-    score_txt = "—" if score is None else str(score)
-    return score_txt, score if isinstance(score, int) else None
+    return "—" if score is None else str(score)
 
 
 def _final_inning(linescore: dict) -> Optional[int]:
@@ -183,8 +201,9 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
     away = teams.get("away", {})
     home = teams.get("home", {})
 
-    away_text, _ = _score_string(away)
-    home_text, _ = _score_string(home)
+    show_scores = _should_display_scores(game)
+    away_text = _score_text(away, show=show_scores)
+    home_text = _score_text(home, show=show_scores)
 
     # Score row (5 columns)
     score_top = top
