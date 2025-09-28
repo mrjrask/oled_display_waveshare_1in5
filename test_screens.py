@@ -23,7 +23,7 @@ def list_screens(script_dir, namespace):
     # scroll logos
     screens.append({"name":"scroll_all_logos","type":"scroll"})
     for fname in sorted(os.listdir(script_dir)):
-        if not (fname.startswith("draw_") and fname.endswith(".py")):
+        if not (fname.endswith(".py") and (fname.startswith("draw_") or fname == "mlb_scoreboard.py")):
             continue
         mod = os.path.splitext(fname)[0]
         path= os.path.join(script_dir,fname)

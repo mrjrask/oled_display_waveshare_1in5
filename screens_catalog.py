@@ -10,7 +10,7 @@ SCREEN_IDS = [
     "cubs last", "cubs result", "cubs live", "cubs next",
     "sox logo", "sox stand1", "sox stand2",
     "sox last", "sox live", "sox next",
-    "mlb logo",
+    "mlb logo", "MLB Scoreboard",
     "NL Overview", "NL East", "NL Central", "NL West", "NL Wild Card"
     "AL Overview", "AL East", "AL Central", "AL West", "AL Wild Card"
 ]
