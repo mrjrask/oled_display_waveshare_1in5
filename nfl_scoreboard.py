@@ -154,7 +154,11 @@ def _format_status(game: dict) -> str:
     if state == "pre":
         start_local = game.get("_start_local")
         if isinstance(start_local, datetime.datetime):
-            return start_local.strftime("%I:%M %p").lstrip("0")
+            time_text = start_local.strftime("%I:%M %p").lstrip("0")
+            if start_local.weekday() != 6:  # Not Sunday
+                day_text = start_local.strftime("%a")
+                return f"{day_text} {time_text}"
+            return time_text
         return short_detail or detail or "TBD"
 
     return short_detail or detail or "TBD"
