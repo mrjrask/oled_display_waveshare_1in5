@@ -31,7 +31,6 @@ import logging
 import os
 from typing import Dict, Optional, Tuple
 
-import requests
 from PIL import Image, ImageDraw, ImageFont
 
 import config
@@ -45,6 +44,7 @@ from config import (
     WIDTH,
     HEIGHT,
 )
+from http_client import NHL_HEADERS, get_session, request_json
 
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NHL_DIR = NHL_IMAGES_DIR
@@ -132,17 +132,15 @@ def _push(display, img: Optional[Image.Image], *, transition: bool=False):
 # ─────────────────────────────────────────────────────────────────────────────
 # Net helpers
 
+_SESSION = get_session()
+
+
 def _req_json(url: str, **kwargs) -> Optional[Dict]:
     """GET → JSON with optional quiet logging (quiet=True)."""
-    quiet = kwargs.pop("quiet", False)
-    try:
-        r = requests.get(url, timeout=10, **kwargs)
-        r.raise_for_status()
-        return r.json()
-    except Exception as e:
-        if not quiet:
-            logging.warning("Request failed: %s (%s)", url, e)
-        return None
+    headers = kwargs.pop("headers", None)
+    if headers is None and "api-web.nhle.com" in url:
+        headers = NHL_HEADERS
+    return request_json(url, headers=headers, session=_SESSION, **kwargs)
 
 def _map_apiweb_game(g: Dict) -> Dict:
     """Map api-web game into a minimal StatsAPI-like shape."""

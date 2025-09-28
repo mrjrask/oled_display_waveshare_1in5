@@ -8,10 +8,11 @@ with resilient retries via a shared requests.Session.
 
 import datetime
 import logging
+
 import pytz
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+
+from http_client import NHL_HEADERS, get_session
 
 from config import (
     OWM_API_KEY,
@@ -27,17 +28,8 @@ from config import (
     OPEN_METEO_PARAMS,
 )
 
-# ─── build a Session with retries ────────────────────────────────────────────
-_session = requests.Session()
-_retries = Retry(
-    total=3,
-    backoff_factor=0.5,
-    status_forcelist=[502, 503, 504],
-    allowed_methods=["GET"],
-)
-_adapter = HTTPAdapter(max_retries=_retries)
-_session.mount("https://", _adapter)
-_session.mount("http://",  _adapter)
+# ─── Shared HTTP session ─────────────────────────────────────────────────────
+_session = get_session()
 
 # Track last time we received a 429 from OWM
 _last_owm_429 = None
@@ -143,7 +135,7 @@ def weather_code_to_description(code):
 # -----------------------------------------------------------------------------
 def fetch_blackhawks_next_game():
     try:
-        r = _session.get(NHL_API_URL, timeout=10)
+        r = _session.get(NHL_API_URL, timeout=10, headers=NHL_HEADERS)
         r.raise_for_status()
         games = r.json().get("games", [])
         fut   = [g for g in games if g.get("gameState") == "FUT"]
@@ -169,7 +161,7 @@ def fetch_blackhawks_next_game():
 def fetch_blackhawks_next_home_game():
     try:
         next_game = fetch_blackhawks_next_game()
-        r = _session.get(NHL_API_URL, timeout=10)
+        r = _session.get(NHL_API_URL, timeout=10, headers=NHL_HEADERS)
         r.raise_for_status()
         games = r.json().get("games", [])
         home  = []
@@ -199,7 +191,7 @@ def fetch_blackhawks_next_home_game():
 
 def fetch_blackhawks_last_game():
     try:
-        r = _session.get(NHL_API_URL, timeout=10)
+        r = _session.get(NHL_API_URL, timeout=10, headers=NHL_HEADERS)
         r.raise_for_status()
         data  = r.json()
         games = []
@@ -223,7 +215,7 @@ def fetch_blackhawks_last_game():
 
 def fetch_blackhawks_live_game():
     try:
-        r = _session.get(NHL_API_URL, timeout=10)
+        r = _session.get(NHL_API_URL, timeout=10, headers=NHL_HEADERS)
         r.raise_for_status()
         games = r.json().get("games", [])
         for g in games:
