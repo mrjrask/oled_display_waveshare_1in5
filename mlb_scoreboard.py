@@ -58,8 +58,8 @@ COL_X = [0]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT   = clone_font(FONT_TEAM_SPORTS, 14)
-STATUS_FONT  = clone_font(FONT_STATUS, 13)
+SCORE_FONT   = clone_font(FONT_TEAM_SPORTS, 18)
+STATUS_FONT  = clone_font(FONT_STATUS, 15)
 CENTER_FONT  = clone_font(FONT_STATUS, 15)
 TITLE_FONT   = FONT_TITLE_SPORTS
 LOGO_HEIGHT  = 22
