@@ -3,8 +3,8 @@
 nfl_scoreboard.py
 
 Render a scrolling NFL scoreboard mirroring the layout of the MLB board.
-Shows the previous day's games until 9:30 AM Central, then switches to the
-current day.
+Shows all games in the active NFL week (Thursday through Monday). Final scores
+persist until Wednesday at 9:00 AM Central before advancing to the next week.
 """
 
 from __future__ import annotations
@@ -62,12 +62,25 @@ _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
-def _scoreboard_date(now: Optional[datetime.datetime] = None) -> datetime.date:
+def _week_start(now: Optional[datetime.datetime] = None) -> datetime.date:
     now = now or datetime.datetime.now(CENTRAL_TIME)
-    cutoff = now.replace(hour=9, minute=30, second=0, microsecond=0)
-    if now < cutoff:
-        return (now - datetime.timedelta(days=1)).date()
-    return now.date()
+
+    if now.weekday() == 2:  # Wednesday
+        cutoff = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        if now >= cutoff:
+            ref_date = now.date() + datetime.timedelta(days=1)
+        else:
+            ref_date = now.date()
+    else:
+        ref_date = now.date()
+
+    days_since_thursday = (ref_date.weekday() - 3) % 7
+    return ref_date - datetime.timedelta(days=days_since_thursday)
+
+
+def _week_dates(now: Optional[datetime.datetime] = None) -> list[datetime.date]:
+    start = _week_start(now)
+    return [start + datetime.timedelta(days=offset) for offset in range(5)]
 
 
 def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
@@ -227,6 +240,13 @@ def _timestamp_to_local(ts: str) -> Optional[datetime.datetime]:
     return dt.astimezone(CENTRAL_TIME)
 
 
+def _game_sort_key(game: dict):
+    return (
+        game.get("_start_sort", float("inf")),
+        str(game.get("id") or game.get("uid") or ""),
+    )
+
+
 def _hydrate_games(raw_games: Iterable[dict]) -> list[dict]:
     games: list[dict] = []
     for game in raw_games:
@@ -238,7 +258,7 @@ def _hydrate_games(raw_games: Iterable[dict]) -> list[dict]:
         else:
             game["_start_sort"] = float("inf")
         games.append(game)
-    games.sort(key=lambda g: (g.get("_start_sort", float("inf")), g.get("id") or g.get("uid") or 0))
+    games.sort(key=_game_sort_key)
     return games
 
 
@@ -269,6 +289,14 @@ def _fetch_games_for_date(day: datetime.date) -> list[dict]:
         comp["_event_date"] = event_date
         raw_games.append(comp)
     return _hydrate_games(raw_games)
+
+
+def _fetch_games_for_week(now: Optional[datetime.datetime] = None) -> list[dict]:
+    games: list[dict] = []
+    for day in _week_dates(now):
+        games.extend(_fetch_games_for_date(day))
+    games.sort(key=_game_sort_key)
+    return games
 
 
 def _render_scoreboard(games: list[dict]) -> Image.Image:
@@ -326,7 +354,7 @@ def _scroll_display(display, full_img: Image.Image):
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
 def draw_nfl_scoreboard(display, transition: bool = False):
-    games = _fetch_games_for_date(_scoreboard_date())
+    games = _fetch_games_for_week()
 
     if not games:
         clear_display(display)
