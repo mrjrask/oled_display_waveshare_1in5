@@ -11,8 +11,8 @@
     "travel": 0,
     "bears logo": 2,
     "bears next": 2,
-    "nfl logo": 1,
-    "NFL Scoreboard": 1,
+    "nfl logo": 3,
+    "NFL Scoreboard": 3,
     "hawks logo": 1,
     "hawks last": 1,
     "hawks live": 1,
@@ -32,7 +32,7 @@
     "sox last": 0,
     "sox live": 0,
     "sox next": 0,
-    "mlb logo": 0,
+    "mlb logo": 1,
     "MLB Scoreboard": 1,
     "NL Overview": 0,
     "NL East": 0,
@@ -46,4 +46,5 @@
     "AL Wild Card": 0
   }
 }
+
 
