@@ -124,7 +124,11 @@ def _compose_frame(
             paths=DATE_TIME_GH_ICON_PATHS,
         )
         if ic:
-            img.paste(ic, (WIDTH - ic.width - 2, HEIGHT - ic.height - 2), ic)
+            x_pos = WIDTH - ic.width - 2
+            y_pos = HEIGHT - ic.height - 2 + 4
+            y_pos = min(HEIGHT - ic.height, y_pos)
+            y_pos = max(0, y_pos)
+            img.paste(ic, (x_pos, y_pos), ic)
 
     return img
 
