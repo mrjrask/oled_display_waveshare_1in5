@@ -47,6 +47,8 @@ SCROLL_PAUSE_TOP    = 0.75
 SCROLL_PAUSE_BOTTOM = 0.5
 REQUEST_TIMEOUT     = 10
 API_WEB_SCOREBOARD_URL = "https://api-web.nhle.com/v1/scoreboard/{date}"
+API_WEB_SCOREBOARD_NOW_URL = "https://api-web.nhle.com/v1/scoreboard/now"
+API_WEB_SCOREBOARD_PARAMS = {"site": "en_nhl"}
 
 COL_WIDTHS = [28, 24, 24, 24, 28]  # total = 128
 COL_X = [0]
@@ -453,26 +455,108 @@ def _map_api_web_game(game: Dict[str, Any], day: datetime.date) -> Dict[str, Any
     return mapped
 
 
-def _fetch_games_api_web(day: datetime.date) -> list[dict]:
-    url = API_WEB_SCOREBOARD_URL.format(date=day.isoformat())
-    try:
-        response = _SESSION.get(url, timeout=REQUEST_TIMEOUT, headers=NHL_HEADERS)
-        response.raise_for_status()
-        data = response.json()
-    except Exception as exc:
-        logging.error("Failed to fetch NHL scoreboard fallback: %s", exc)
-        return []
+def _extract_api_web_games(data: Dict[str, Any], day: datetime.date) -> list[Dict[str, Any]]:
+    """Return game payloads for the requested day from the api-web response."""
 
-    games_payload = data.get("games") or []
-    mapped_games = []
-    for game in games_payload:
-        if not isinstance(game, dict):
+    def _normalize_date(value: Any) -> Optional[str]:
+        if not value:
+            return None
+        if isinstance(value, datetime.date):
+            return value.isoformat()
+        text = str(value).strip()
+        if not text:
+            return None
+        if "T" in text:
+            text = text.split("T", 1)[0]
+        return text
+
+    day_iso = day.isoformat()
+    games: list[Dict[str, Any]] = []
+
+    def _append_from(container: Iterable[Any]):
+        for item in container or []:
+            if isinstance(item, dict):
+                games.append(item)
+
+    # Direct games list at the top level.
+    direct = data.get("games")
+    if isinstance(direct, list):
+        _append_from(direct)
+
+    # Some responses include a nested scoreboard object with games.
+    scoreboard = data.get("scoreboard")
+    if isinstance(scoreboard, dict) and isinstance(scoreboard.get("games"), list):
+        _append_from(scoreboard.get("games"))
+
+    # Weekly buckets show a range of dates; pick the ones matching the target day.
+    for key in ("gameWeek", "gamesByDate", "gamesByDay", "gamesByDateV2"):
+        buckets = data.get(key)
+        if not isinstance(buckets, list):
             continue
+        for bucket in buckets:
+            if not isinstance(bucket, dict):
+                continue
+            bucket_date = (
+                _normalize_date(bucket.get("date"))
+                or _normalize_date(bucket.get("gameDate"))
+                or _normalize_date(bucket.get("day"))
+            )
+            if bucket_date and bucket_date != day_iso:
+                continue
+            bucket_games = bucket.get("games")
+            if isinstance(bucket_games, list):
+                _append_from(bucket_games)
+
+    # De-duplicate while preserving order.
+    seen_ids: set[Any] = set()
+    filtered: list[Dict[str, Any]] = []
+    for game in games:
+        game_id = game.get("id") or game.get("gamePk") or game.get("gameId")
+        key = game_id or id(game)
+        if key in seen_ids:
+            continue
+        seen_ids.add(key)
+        filtered.append(game)
+
+    return filtered
+
+
+def _fetch_games_api_web(day: datetime.date) -> list[dict]:
+    urls = [
+        API_WEB_SCOREBOARD_URL.format(date=day.isoformat()),
+        API_WEB_SCOREBOARD_NOW_URL,
+    ]
+
+    for url in urls:
         try:
-            mapped_games.append(_map_api_web_game(game, day))
-        except Exception as exc:  # defensive parsing
-            logging.debug("Skipping api-web game due to error: %s", exc)
-    return _hydrate_games(mapped_games)
+            response = _SESSION.get(
+                url,
+                timeout=REQUEST_TIMEOUT,
+                headers=NHL_HEADERS,
+                params=API_WEB_SCOREBOARD_PARAMS,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except Exception as exc:
+            logging.error("Failed to fetch NHL scoreboard fallback %s: %s", url, exc)
+            continue
+
+        games_payload = _extract_api_web_games(data, day)
+        if not games_payload:
+            continue
+
+        mapped_games = []
+        for game in games_payload:
+            if not isinstance(game, dict):
+                continue
+            try:
+                mapped_games.append(_map_api_web_game(game, day))
+            except Exception as exc:  # defensive parsing
+                logging.debug("Skipping api-web game due to error: %s", exc)
+        if mapped_games:
+            return _hydrate_games(mapped_games)
+
+    return []
 
 
 def _hydrate_games(raw_games: Iterable[dict]) -> list[dict]:
