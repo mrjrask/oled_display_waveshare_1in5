@@ -230,15 +230,31 @@ def animate_scroll(display: Display, image: Image.Image, speed=3, y_offset=None)
     """
     Scroll an image across the display.
     """
+    if image is None:
+        return
+
+    bands = image.getbands() if hasattr(image, "getbands") else ()
+    has_alpha = "A" in bands
+    image = image.convert("RGBA" if has_alpha else "RGB")
+
     w, h = display.width, display.height
     img_w, img_h = image.size
     y = y_offset if y_offset is not None else (h - img_h) // 2
-    direction = random.choice(("ltr","rtl"))
-    start, end, step = ((-img_w, w, speed) if direction=="ltr" else (w, -img_w, -speed))
+    direction = random.choice(("ltr", "rtl"))
+    start, end, step = ((-img_w, w, speed) if direction == "ltr" else (w, -img_w, -speed))
+
+    background_color = (0, 0, 0, 0) if has_alpha else (0, 0, 0)
+    frame_mode = "RGBA" if has_alpha else "RGB"
+
     for x in range(start, end, step):
-        frame = Image.new("RGB", (w,h), (0,0,0))
-        frame.paste(image, (x,y))
-        display.image(frame)
+        frame = Image.new(frame_mode, (w, h), background_color)
+        if has_alpha:
+            frame.paste(image, (x, y), image)
+            frame_to_show = frame.convert("RGB")
+        else:
+            frame.paste(image, (x, y))
+            frame_to_show = frame
+        display.image(frame_to_show)
         time.sleep(0.01)
 
 # ─── Date & Time Helpers ─────────────────────────────────────────────────────

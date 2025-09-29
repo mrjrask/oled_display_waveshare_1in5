@@ -213,9 +213,16 @@ IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
 def load_logo(fn, height=80):
     path = os.path.join(IMAGES_DIR, fn)
     try:
-        img = Image.open(path).convert("RGB")
-        ratio = height / img.height
-        return img.resize((int(img.width * ratio), height))
+        with Image.open(path) as img:
+            has_transparency = (
+                img.mode in ("RGBA", "LA")
+                or (img.mode == "P" and "transparency" in img.info)
+            )
+            target_mode = "RGBA" if has_transparency else "RGB"
+            img = img.convert(target_mode)
+            ratio = height / img.height if img.height else 1
+            resized = img.resize((int(img.width * ratio), height), Image.ANTIALIAS)
+        return resized
     except Exception as e:
         logging.warning(f"Logo load failed '{fn}': {e}")
         return None
