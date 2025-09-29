@@ -310,7 +310,16 @@ def build_screens():
             ("hawks last", lambda: draw_last_hawks_game(display, cache["hawks"]["last"], transition=True)),
             ("hawks live", lambda: draw_live_hawks_game(display, cache["hawks"]["live"], transition=True)),
             ("hawks next", lambda: draw_sports_screen_hawks(display, cache["hawks"]["next"], transition=True)),
-            ("hawks next home", lambda: draw_hawks_next_home_game(display, cache["hawks"]["next_home"], transition=True)),
+            (
+                "hawks next home",
+                (
+                    lambda: draw_hawks_next_home_game(
+                        display,
+                        cache["hawks"]["next_home"],
+                        transition=True,
+                    )
+                ) if cache["hawks"]["next_home"] else None,
+            ),
             ("nhl logo",   (lambda: show_logo(nhl_logo)) if nhl_logo else None),
             ("NHL Scoreboard", lambda: draw_nhl_scoreboard(display, transition=True)),
         ]
@@ -325,7 +334,16 @@ def build_screens():
             ("cubs result", lambda: draw_cubs_result(display, cache["cubs"]["last"], transition=True)),
             ("cubs live",   lambda: draw_box_score(display,  cache["cubs"]["live"], "Cubs Live...", transition=True)),
             ("cubs next",   lambda: draw_sports_screen(display, cache["cubs"]["next"], "Next Cubs game...", transition=True)),
-            ("cubs next home", lambda: draw_next_home_game(display, cache["cubs"]["next_home"], transition=True)),
+            (
+                "cubs next home",
+                (
+                    lambda: draw_next_home_game(
+                        display,
+                        cache["cubs"]["next_home"],
+                        transition=True,
+                    )
+                ) if cache["cubs"]["next_home"] else None,
+            ),
         ]
         screens = [s for s in screens if s]
 
@@ -337,7 +355,16 @@ def build_screens():
             ("sox last",   lambda: draw_last_game(display, cache["sox"]["last"], "Last Sox game...", transition=True)),
             ("sox live",   lambda: draw_box_score(display, cache["sox"]["live"], "Sox Live...", transition=True)),
             ("sox next",   lambda: draw_sports_screen(display, cache["sox"]["next"], "Next Sox game...", transition=True)),
-            ("sox next home", lambda: draw_next_home_game(display, cache["sox"]["next_home"], transition=True)),
+            (
+                "sox next home",
+                (
+                    lambda: draw_next_home_game(
+                        display,
+                        cache["sox"]["next_home"],
+                        transition=True,
+                    )
+                ) if cache["sox"]["next_home"] else None,
+            ),
         ]
         screens = [s for s in screens if s]
 
