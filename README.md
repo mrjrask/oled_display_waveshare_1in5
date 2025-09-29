@@ -223,6 +223,8 @@ The checker now logs **which files have diverged** when updates exist, for easie
 - **Missing logos:** you’ll see a warning like `Logo file missing: CUBS.png`. Add the correct file into `images/mlb/`.
 - **No WebP animation:** ensure your Pillow build supports WebP (`pip3 show pillow`). PNG fallback will still work.
 - **Network/API errors:** MLB/OWM requests are time‑bounded; transient timeouts are logged and screens are skipped gracefully.
+- **NHL statsapi DNS warning:** run `python3 nhl_scoreboard.py --diagnose-dns` to print resolver details, `/etc/resolv.conf`, and
+  quick HTTP checks for both the statsapi and api-web fallbacks. Attach the JSON output when filing an issue.
 - **Font not found:** the code falls back to `ImageFont.load_default()` so the app keeps running; install the missing TTFs to restore look.
 
 ---
