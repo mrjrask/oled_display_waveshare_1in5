@@ -9,10 +9,13 @@ the current day's slate.
 
 from __future__ import annotations
 
+import argparse
 import datetime
+import json
 import logging
 import os
 import socket
+import sys
 import time
 from typing import Any, Dict, Iterable, Optional
 
@@ -67,6 +70,7 @@ _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _SESSION = get_session()
 
 STATSAPI_HOST = "statsapi.web.nhl.com"
+API_WEB_HOST = "api-web.nhle.com"
 _DNS_RETRY_INTERVAL = 600  # seconds
 _dns_block_until = 0.0
 
@@ -598,6 +602,133 @@ def _statsapi_available() -> bool:
     return True
 
 
+def _format_family(family: int) -> str:
+    if family == socket.AF_INET:
+        return "AF_INET"
+    if family == socket.AF_INET6:
+        return "AF_INET6"
+    return str(family)
+
+
+def _format_socktype(socktype: int) -> str:
+    if socktype == socket.SOCK_STREAM:
+        return "SOCK_STREAM"
+    if socktype == socket.SOCK_DGRAM:
+        return "SOCK_DGRAM"
+    return str(socktype)
+
+
+def _resolve_host(host: str, *, port: int = 443) -> dict:
+    """Return detailed resolution information for a host."""
+
+    result: dict[str, Any] = {
+        "host": host,
+        "port": port,
+    }
+    start = time.perf_counter()
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        result.update(
+            {
+                "status": "error",
+                "error": exc.strerror or str(exc),
+                "errno": exc.errno,
+            }
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        result.update(
+            {
+                "status": "error",
+                "error": str(exc),
+            }
+        )
+    else:
+        formatted = []
+        for family, socktype, proto, canonname, sockaddr in infos:
+            address = sockaddr[0] if sockaddr else None
+            formatted.append(
+                {
+                    "family": _format_family(family),
+                    "socktype": _format_socktype(socktype),
+                    "proto": proto,
+                    "canonname": canonname,
+                    "address": address,
+                }
+            )
+        result.update(
+            {
+                "status": "ok",
+                "addresses": formatted,
+            }
+        )
+    result["duration_ms"] = round((time.perf_counter() - start) * 1000, 2)
+    return result
+
+
+def _read_resolv_conf() -> dict:
+    path = "/etc/resolv.conf"
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            contents = fh.read()
+    except OSError as exc:
+        return {
+            "path": path,
+            "status": "error",
+            "error": str(exc),
+        }
+    return {
+        "path": path,
+        "status": "ok",
+        "contents": contents,
+    }
+
+
+def dns_diagnostics() -> dict:
+    """Collect DNS/network diagnostics for NHL endpoints."""
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    report: dict[str, Any] = {
+        "generated_at": now,
+        "hosts": [
+            _resolve_host(STATSAPI_HOST),
+            _resolve_host(API_WEB_HOST),
+        ],
+        "resolv_conf": _read_resolv_conf(),
+        "http_checks": [],
+    }
+
+    urls = [
+        (
+            f"https://{STATSAPI_HOST}/api/v1/schedule?date={datetime.date.today().isoformat()}",
+            "statsapi_schedule",
+        ),
+        (API_WEB_SCOREBOARD_NOW_URL, "api_web_scoreboard_now"),
+    ]
+
+    for url, name in urls:
+        check: dict[str, Any] = {"url": url, "name": name}
+        start = time.perf_counter()
+        try:
+            response = _SESSION.get(url, timeout=min(REQUEST_TIMEOUT, 5))
+            response.raise_for_status()
+        except Exception as exc:
+            check.update({"status": "error", "error": str(exc)})
+        else:
+            check.update({"status": "ok", "http_status": response.status_code})
+        check["duration_ms"] = round((time.perf_counter() - start) * 1000, 2)
+        report["http_checks"].append(check)
+
+    env_overrides = {}
+    for key in ("RES_OPTIONS", "LOCALDOMAIN", "HOSTALIASES"):
+        if key in os.environ:
+            env_overrides[key] = os.environ[key]
+    if env_overrides:
+        report["env"] = env_overrides
+
+    return report
+
+
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
     if not _statsapi_available():
         logging.info("Using api-web NHL scoreboard endpoint for %s (statsapi DNS failure)", day)
@@ -720,6 +851,20 @@ def draw_nhl_scoreboard(display, transition: bool = False):
 
 
 if __name__ == "__main__":  # pragma: no cover
+    parser = argparse.ArgumentParser(description="NHL scoreboard renderer")
+    parser.add_argument(
+        "--diagnose-dns",
+        action="store_true",
+        help="print DNS diagnostics instead of rendering the scoreboard",
+    )
+    args = parser.parse_args()
+
+    if args.diagnose_dns:
+        report = dns_diagnostics()
+        json.dump(report, sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+        sys.exit(0)
+
     from utils import Display
 
     disp = Display()
