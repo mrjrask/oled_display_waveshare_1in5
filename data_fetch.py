@@ -244,7 +244,7 @@ def _fetch_mlb_schedule(team_id):
     try:
         today = datetime.datetime.now(CENTRAL_TIME).date()
         start = today - datetime.timedelta(days=3)
-        end   = today + datetime.timedelta(days=3)
+        end   = today + datetime.timedelta(days=30)
 
         url = (
             f"{MLB_API_URL}"
@@ -254,26 +254,63 @@ def _fetch_mlb_schedule(team_id):
         r = _session.get(url, timeout=10)
         r.raise_for_status()
         data   = r.json()
-        result = {"next_game": None, "live_game": None, "last_game": None}
+        result = {
+            "next_game": None,
+            "next_home_game": None,
+            "live_game": None,
+            "last_game": None,
+        }
         finished = []
+        home_candidates = []
+        team_id_int = int(team_id)
 
         for di in data.get("dates", []):
             day = datetime.datetime.strptime(di["date"], "%Y-%m-%d").date()
             for g in di.get("games", []):
                 # Convert UTC to Central
                 utc = g.get("gameDate")
+                local_dt = None
                 if utc:
                     dt = datetime.datetime.strptime(utc, "%Y-%m-%dT%H:%M:%SZ")
                     dt = dt.replace(tzinfo=pytz.utc).astimezone(CENTRAL_TIME)
                     g["startTimeCentral"] = dt.strftime("%I:%M %p").lstrip("0")
+                    local_dt = dt
                 else:
                     g["startTimeCentral"] = "TBD"
+                    try:
+                        local_dt = CENTRAL_TIME.localize(
+                            datetime.datetime.combine(day, datetime.time(12, 0))
+                        )
+                    except Exception:
+                        local_dt = None
 
                 # Determine game state
                 status      = g.get("status", {})
                 code        = status.get("statusCode", "").upper()
                 abstract    = status.get("abstractGameState", "").lower()
                 detailed    = status.get("detailedState", "").lower()
+
+                # Track upcoming home games for dedicated screen
+                home_team_id = (
+                    ((g.get("teams") or {}).get("home") or {}).get("team", {})
+                ).get("id")
+                is_home_game = False
+                try:
+                    is_home_game = int(home_team_id) == team_id_int
+                except Exception:
+                    is_home_game = False
+
+                if is_home_game and local_dt and local_dt.date() >= today:
+                    is_scheduled = code in {"S", "I"} or abstract in {
+                        "preview",
+                        "scheduled",
+                        "live",
+                    } or "progress" in detailed
+                    is_postponed = any(
+                        kw in detailed for kw in ("postponed", "suspended")
+                    )
+                    if is_scheduled and not is_postponed:
+                        home_candidates.append((local_dt, g))
 
                 # Live game
                 if code == "I" or abstract == "live" or "progress" in detailed:
@@ -302,6 +339,27 @@ def _fetch_mlb_schedule(team_id):
                     if result["next_game"]:
                         break
 
+        # Pick earliest upcoming home game
+        if home_candidates:
+            home_candidates.sort(key=lambda item: item[0])
+
+            next_game_pk = None
+            if result["next_game"]:
+                next_game_pk = result["next_game"].get("gamePk")
+
+            for _, home_game in home_candidates:
+                # If the upcoming game is already a home game, skip duplicating it
+                if next_game_pk and home_game.get("gamePk") == next_game_pk:
+                    continue
+                if (
+                    result["next_game"]
+                    and home_game.get("gameDate") == result["next_game"].get("gameDate")
+                ):
+                    continue
+
+                result["next_home_game"] = home_game
+                break
+
         # Pick last finished
         if finished:
             finished.sort(key=lambda x: x.get("officialDate",""))
@@ -311,7 +369,12 @@ def _fetch_mlb_schedule(team_id):
 
     except Exception as e:
         logging.error("Error fetching MLB schedule for %s: %s", team_id, e)
-        return {"next_game": None, "live_game": None, "last_game": None}
+        return {
+            "next_game": None,
+            "next_home_game": None,
+            "live_game": None,
+            "last_game": None,
+        }
 
 
 def fetch_cubs_games():

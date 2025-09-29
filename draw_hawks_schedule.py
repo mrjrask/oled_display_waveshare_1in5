@@ -18,10 +18,15 @@ Blackhawks screens:
     - Logos are centered vertically on the screen and auto-sized larger (up to ~44px on 128px tall panels)
   * Bottom: Always includes time ("Today 7:30 PM", "Tomorrow 6:00 PM", or "Wed Sep 24 7:30 PM")
 
+- Next Hawks home game:
+  * Title: "Next Home Game..."
+  * Layout matches the standard next-game card
+
 Function signatures (match main.py):
   - draw_last_hawks_game(display, game, transition=False)
   - draw_live_hawks_game(display, game, transition=False)
   - draw_sports_screen_hawks(display, game, transition=False)
+  - draw_hawks_next_home_game(display, game, transition=False)
 """
 
 from __future__ import annotations
@@ -731,7 +736,7 @@ def _format_next_bottom(
     date_str = local.strftime("%a %b %-d") if os.name != "nt" else local.strftime("%a %b %#d")
     return f"{date_str} {time_str}"
 
-def _draw_next_card(display, game: Dict, *, transition: bool=False):
+def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False):
     """
     Next-game card with:
       - Title (MLB font)
@@ -760,7 +765,7 @@ def _draw_next_card(display, game: Dict, *, transition: bool=False):
 
     # Title
     y_top = 2
-    title_h = _draw_title_line(img, d, y_top, "Next Hawks game:", FONT_TITLE)
+    title_h = _draw_title_line(img, d, y_top, title, FONT_TITLE)
     y_top += title_h + 1
 
     # Opponent-only line (full name) with "@"/"vs."
@@ -945,4 +950,9 @@ def draw_sports_screen_hawks(display, game, transition: bool=False):
     "Next Hawks game" card with '@ FULLNAME' / 'vs. FULLNAME', logos (local PNGs, centered and larger), and bottom time.
     Uses the provided 'game' payload from your scheduler for the next slot.
     """
-    return _draw_next_card(display, game, transition=transition)
+    return _draw_next_card(display, game, title="Next Hawks game:", transition=transition)
+
+
+def draw_hawks_next_home_game(display, game, transition: bool=False):
+    """Dedicated "Next Home Game..." card using the same layout as the next-game screen."""
+    return _draw_next_card(display, game, title="Next Home Game...", transition=transition)
