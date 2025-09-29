@@ -736,7 +736,7 @@ def _format_next_bottom(
     date_str = local.strftime("%a %b %-d") if os.name != "nt" else local.strftime("%a %b %#d")
     return f"{date_str} {time_str}"
 
-def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False):
+def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, log_label: str="hawks next"):
     """
     Next-game card with:
       - Title (MLB font)
@@ -745,7 +745,7 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False):
       - Bottom line that always includes game time
     """
     if not isinstance(game, dict):
-        logging.warning("hawks next: missing payload")
+        logging.warning("%s: missing payload", log_label)
         return None
 
     # Raw teams (for names); tris for local logo filenames
@@ -950,9 +950,9 @@ def draw_sports_screen_hawks(display, game, transition: bool=False):
     "Next Hawks game" card with '@ FULLNAME' / 'vs. FULLNAME', logos (local PNGs, centered and larger), and bottom time.
     Uses the provided 'game' payload from your scheduler for the next slot.
     """
-    return _draw_next_card(display, game, title="Next Hawks game:", transition=transition)
+    return _draw_next_card(display, game, title="Next Hawks game:", transition=transition, log_label="hawks next")
 
 
 def draw_hawks_next_home_game(display, game, transition: bool=False):
     """Dedicated "Next Home Game..." card using the same layout as the next-game screen."""
-    return _draw_next_card(display, game, title="Next Home Game...", transition=transition)
+    return _draw_next_card(display, game, title="Next Home Game...", transition=transition, log_label="hawks next home")

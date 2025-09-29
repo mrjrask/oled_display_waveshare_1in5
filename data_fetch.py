@@ -20,6 +20,7 @@ from config import (
     LATITUDE,
     LONGITUDE,
     NHL_API_URL,
+    NHL_TEAM_ID,
     MLB_API_URL,
     MLB_CUBS_TEAM_ID,
     MLB_SOX_TEAM_ID,
@@ -158,6 +159,61 @@ def fetch_blackhawks_next_game():
         return None
 
 
+def _extract_team_value(team, *keys):
+    """Return the first string value found for the provided keys."""
+    if not isinstance(team, dict):
+        return ""
+    for key in keys:
+        value = team.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            for subkey in ("default", "en", "fullName"):
+                subval = value.get(subkey)
+                if isinstance(subval, str) and subval.strip():
+                    return subval.strip()
+    return ""
+
+
+def _is_blackhawks_team(team):
+    if not isinstance(team, dict):
+        return False
+    if isinstance(team.get("team"), dict):
+        team = team["team"]
+    team_id = team.get("id") or team.get("teamId")
+    if team_id == NHL_TEAM_ID:
+        return True
+    name = _extract_team_value(team, "commonName", "name", "teamName", "clubName")
+    return "blackhawks" in name.lower() if name else False
+
+
+def _team_id(team):
+    if not isinstance(team, dict):
+        return None
+    if isinstance(team.get("team"), dict):
+        return _team_id(team["team"])
+    return team.get("id") or team.get("teamId")
+
+
+def _same_game(a, b):
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    for key in ("id", "gamePk", "gameId", "gameUUID"):
+        av = a.get(key)
+        bv = b.get(key)
+        if av and bv and av == bv:
+            return True
+    a_date = a.get("gameDate")
+    b_date = b.get("gameDate")
+    if a_date and b_date and a_date == b_date:
+        a_home = _team_id(a.get("homeTeam") or a.get("home_team") or {})
+        b_home = _team_id(b.get("homeTeam") or b.get("home_team") or {})
+        a_away = _team_id(a.get("awayTeam") or a.get("away_team") or {})
+        b_away = _team_id(b.get("awayTeam") or b.get("away_team") or {})
+        return a_home == b_home and a_away == b_away
+    return False
+
+
 def fetch_blackhawks_next_home_game():
     try:
         next_game = fetch_blackhawks_next_game()
@@ -165,13 +221,16 @@ def fetch_blackhawks_next_home_game():
         r.raise_for_status()
         games = r.json().get("games", [])
         home  = []
+        skipped_duplicate = False
 
         for g in games:
             if g.get("gameState") != "FUT":
                 continue
             team = g.get("homeTeam", {}) or g.get("home_team", {})
-            name = (team.get("commonName") or team.get("name", "")).lower()
-            if name == "blackhawks" and (not next_game or g["gameDate"] != next_game["gameDate"]):
+            if _is_blackhawks_team(team):
+                if next_game and _same_game(next_game, g):
+                    skipped_duplicate = True
+                    continue
                 utc = g.get("startTimeUTC")
                 if utc:
                     dt = datetime.datetime.strptime(utc, "%Y-%m-%dT%H:%M:%SZ")
@@ -182,6 +241,13 @@ def fetch_blackhawks_next_home_game():
                 home.append(g)
 
         home.sort(key=lambda g: g.get("gameDate", ""))
+        if not home:
+            if skipped_duplicate:
+                logging.info(
+                    "Next home Blackhawks game matches the next scheduled game; suppressing duplicate screen."
+                )
+            else:
+                logging.info("No upcoming additional Blackhawks home games were found.")
         return home[0] if home else None
 
     except Exception as e:
@@ -262,6 +328,7 @@ def _fetch_mlb_schedule(team_id):
         }
         finished = []
         home_candidates = []
+        skipped_home_duplicate = False
         team_id_int = int(team_id)
 
         for di in data.get("dates", []):
@@ -350,15 +417,23 @@ def _fetch_mlb_schedule(team_id):
             for _, home_game in home_candidates:
                 # If the upcoming game is already a home game, skip duplicating it
                 if next_game_pk and home_game.get("gamePk") == next_game_pk:
+                    skipped_home_duplicate = True
                     continue
                 if (
                     result["next_game"]
                     and home_game.get("gameDate") == result["next_game"].get("gameDate")
                 ):
+                    skipped_home_duplicate = True
                     continue
 
                 result["next_home_game"] = home_game
                 break
+
+        if not result["next_home_game"] and skipped_home_duplicate:
+            logging.info(
+                "Next MLB home game for team %s matches the upcoming game; suppressing duplicate home screen.",
+                team_id,
+            )
 
         # Pick last finished
         if finished:
