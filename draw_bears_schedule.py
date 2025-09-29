@@ -49,6 +49,8 @@ def show_bears_next_game(display, transition=False):
         bears_ab = "chi"
         opp_key  = opp.split()[-1].lower()
         opp_ab   = NFL_TEAM_ABBREVIATIONS.get(opp_key, opp_key[:3])
+        if opp_ab == "was":
+            opp_ab = "wsh"
         if ha=="away":
             away_ab, home_ab, loc_sym = bears_ab, opp_ab, "@"
         else:
