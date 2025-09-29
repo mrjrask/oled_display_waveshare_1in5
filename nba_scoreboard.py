@@ -18,6 +18,11 @@ from typing import Any, Dict, Iterable, Optional
 
 from PIL import Image, ImageDraw
 
+try:
+    RESAMPLE = Image.ANTIALIAS
+except AttributeError:  # Pillow ≥11
+    RESAMPLE = Image.Resampling.LANCZOS
+
 from config import (
     WIDTH,
     HEIGHT,
@@ -58,6 +63,10 @@ CENTER_FONT = clone_font(FONT_STATUS, 15)
 TITLE_FONT  = FONT_TITLE_SPORTS
 LOGO_HEIGHT = 22
 LOGO_DIR    = os.path.join(IMAGES_DIR, "nba")
+INTRO_LOGO  = "NBA.png"
+INTRO_ANIM_SCALES = (0.45, 0.6, 0.75, 0.9, 1.04, 0.98, 1.0)
+INTRO_ANIM_DELAY  = 0.06
+INTRO_ANIM_HOLD   = 0.4
 
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _SESSION = get_session()
@@ -65,6 +74,9 @@ _NBA_HEADERS = {
     "Origin": "https://www.nba.com",
     "Referer": "https://www.nba.com/",
 }
+
+_INTRO_LOGO_CACHE: Optional[Image.Image] = None
+_INTRO_LOGO_LOADED = False
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def _scoreboard_date(now: Optional[datetime.datetime] = None) -> datetime.date:
@@ -85,6 +97,59 @@ def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
     logo = load_team_logo(LOGO_DIR, cache_key, height=LOGO_HEIGHT)
     _LOGO_CACHE[cache_key] = logo
     return logo
+
+
+def _load_intro_logo() -> Optional[Image.Image]:
+    global _INTRO_LOGO_CACHE, _INTRO_LOGO_LOADED
+    if not _INTRO_LOGO_LOADED:
+        path = os.path.join(LOGO_DIR, INTRO_LOGO)
+        try:
+            with Image.open(path) as img:
+                _INTRO_LOGO_CACHE = img.convert("RGBA")
+        except FileNotFoundError:
+            logging.warning("NBA intro logo missing at %s", path)
+            _INTRO_LOGO_CACHE = None
+        except Exception as exc:
+            logging.warning("Failed to load NBA intro logo: %s", exc)
+            _INTRO_LOGO_CACHE = None
+        finally:
+            _INTRO_LOGO_LOADED = True
+    return _INTRO_LOGO_CACHE.copy() if _INTRO_LOGO_CACHE is not None else None
+
+
+def _render_intro_frame(logo: Image.Image, scale: float) -> Image.Image:
+    w = max(1, int(round(logo.width * scale)))
+    h = max(1, int(round(logo.height * scale)))
+    resized = logo.resize((w, h), RESAMPLE)
+    frame = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 255))
+    x = (WIDTH - resized.width) // 2
+    y = (HEIGHT - resized.height) // 2
+    frame.paste(resized, (x, y), resized)
+    return frame.convert("RGB")
+
+
+def _play_intro_animation(display, *, hold: float = INTRO_ANIM_HOLD) -> Optional[Image.Image]:
+    logo = _load_intro_logo()
+    if logo is None:
+        return None
+
+    final_frame: Optional[Image.Image] = None
+    for idx, scale in enumerate(INTRO_ANIM_SCALES):
+        frame = _render_intro_frame(logo, scale)
+        display.image(frame)
+        display.show()
+        final_frame = frame
+        if idx < len(INTRO_ANIM_SCALES) - 1:
+            time.sleep(INTRO_ANIM_DELAY)
+        else:
+            time.sleep(hold)
+    return final_frame
+
+
+@log_call
+def play_nba_logo_animation(display, *, hold: float = INTRO_ANIM_HOLD) -> Optional[Image.Image]:
+    """Play the NBA intro logo animation and return the final frame."""
+    return _play_intro_animation(display, hold=hold)
 
 
 def _team_logo_abbr(team: Dict[str, Any]) -> str:
@@ -581,6 +646,7 @@ def _scroll_display(display, full_img: Image.Image):
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
 def draw_nba_scoreboard(display, transition: bool = False):
+    play_nba_logo_animation(display, hold=INTRO_ANIM_HOLD)
     games = _fetch_games_for_date(_scoreboard_date())
 
     if not games:
