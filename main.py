@@ -25,6 +25,7 @@ import threading
 import datetime
 import signal
 import shutil
+from typing import Optional
 
 gc = __import__('gc')
 
@@ -86,6 +87,7 @@ from mlb_standings       import (
     draw_AL_WildCard,
 )
 from mlb_scoreboard      import draw_mlb_scoreboard
+from nba_scoreboard      import draw_nba_scoreboard, play_nba_logo_animation
 from nhl_scoreboard      import draw_nhl_scoreboard
 from nfl_scoreboard      import draw_nfl_scoreboard
 from draw_inside import draw_inside
@@ -273,6 +275,7 @@ hawks_logo  = load_logo("hawks.jpg")
 sox_logo    = load_logo("sox.jpg")
 weather_img = load_logo("weather.jpg")
 mlb_logo    = load_logo("mlb.jpg")
+nba_logo    = load_logo("nba/NBA.png")
 nhl_logo    = load_logo("nhl/nhl.png") or load_logo("nhl/NHL.png")
 nfl_logo    = load_logo("nfl/nfl.png")
 verano_img  = load_logo("verano.jpg")
@@ -324,6 +327,13 @@ def show_logo(img: Image.Image) -> Image.Image:
     animate_scroll(display, img)
     return img
 
+
+def show_nba_logo_screen() -> Optional[Image.Image]:
+    frame = play_nba_logo_animation(display)
+    if frame is None and nba_logo:
+        return show_logo(nba_logo)
+    return frame
+
 # ─── Build screen sequence ───────────────────────────────────────────────────
 def build_screens():
     screens = [
@@ -340,6 +350,8 @@ def build_screens():
         ("bears next",   lambda: show_bears_next_game(display, transition=True)),
         ("nfl logo",     (lambda: show_logo(nfl_logo)) if nfl_logo else None),
         ("NFL Scoreboard", lambda: draw_nfl_scoreboard(display, transition=True)),
+        ("nba logo",     show_nba_logo_screen if nba_logo else None),
+        ("NBA Scoreboard", lambda: draw_nba_scoreboard(display, transition=True)),
     ]
     screens = [s for s in screens if s]
 
