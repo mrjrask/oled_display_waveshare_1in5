@@ -118,6 +118,45 @@ def load_screen_config():
 user_cfg = load_screen_config()
 seq_vals = [v for v in user_cfg.values() if isinstance(v, int) and v > 1]
 MAX_SEQUENCE = max(seq_vals) if seq_vals else 1
+
+
+def _extract_team_id(blob):
+    if not isinstance(blob, dict):
+        return None
+    team = blob.get("team") if isinstance(blob.get("team"), dict) else blob
+    if isinstance(team, dict):
+        for key in ("id", "teamId", "team_id"):
+            if team.get(key) is not None:
+                return team.get(key)
+    return None
+
+
+def _games_match(game_a, game_b):
+    if not game_a or not game_b:
+        return False
+
+    for key in ("gamePk", "id", "gameId", "gameUUID"):
+        a_val = game_a.get(key)
+        b_val = game_b.get(key)
+        if a_val and b_val and a_val == b_val:
+            return True
+
+    def _teams(game, prefix):
+        teams = game.get("teams")
+        if isinstance(teams, dict):
+            return teams.get(prefix) or {}
+        return game.get(f"{prefix}Team") or game.get(f"{prefix}_team") or {}
+
+    date_a = (game_a.get("gameDate") or game_a.get("officialDate") or "")[:10]
+    date_b = (game_b.get("gameDate") or game_b.get("officialDate") or "")[:10]
+    if date_a and date_b and date_a == date_b:
+        home_a = _extract_team_id(_teams(game_a, "home"))
+        home_b = _extract_team_id(_teams(game_b, "home"))
+        away_a = _extract_team_id(_teams(game_a, "away"))
+        away_b = _extract_team_id(_teams(game_b, "away"))
+        return home_a and home_a == home_b and away_a and away_a == away_b
+
+    return False
 logging.info(f"🔢 Sequence length determined: {MAX_SEQUENCE}")
 
 # ─── Display & Wi-Fi monitor ─────────────────────────────────────────────────
@@ -305,20 +344,25 @@ def build_screens():
     screens = [s for s in screens if s]
 
     if any(cache["hawks"].values()):
+        hawks_next = cache["hawks"].get("next")
+        hawks_next_home = cache["hawks"].get("next_home")
+        if _games_match(hawks_next_home, hawks_next):
+            hawks_next_home = None
+
         screens += [
             ("hawks logo", (lambda: show_logo(hawks_logo)) if hawks_logo else None),
             ("hawks last", lambda: draw_last_hawks_game(display, cache["hawks"]["last"], transition=True)),
             ("hawks live", lambda: draw_live_hawks_game(display, cache["hawks"]["live"], transition=True)),
-            ("hawks next", lambda: draw_sports_screen_hawks(display, cache["hawks"]["next"], transition=True)),
+            ("hawks next", lambda: draw_sports_screen_hawks(display, hawks_next, transition=True)),
             (
                 "hawks next home",
                 (
                     lambda: draw_hawks_next_home_game(
                         display,
-                        cache["hawks"]["next_home"],
+                        hawks_next_home,
                         transition=True,
                     )
-                ) if cache["hawks"]["next_home"] else None,
+                ) if hawks_next_home else None,
             ),
             ("nhl logo",   (lambda: show_logo(nhl_logo)) if nhl_logo else None),
             ("NHL Scoreboard", lambda: draw_nhl_scoreboard(display, transition=True)),
@@ -326,6 +370,11 @@ def build_screens():
         screens = [s for s in screens if s]
 
     if any(cache["cubs"].values()):
+        cubs_next = cache["cubs"].get("next")
+        cubs_next_home = cache["cubs"].get("next_home")
+        if _games_match(cubs_next_home, cubs_next):
+            cubs_next_home = None
+
         screens += [
             ("cubs logo",   (lambda: show_logo(cubs_logo)) if cubs_logo else None),
             ("cubs stand1", lambda: draw_standings_screen1(display, cache["cubs"]["stand"], os.path.join(IMAGES_DIR,"cubs.jpg"), "NL Central", transition=True)),
@@ -333,37 +382,42 @@ def build_screens():
             ("cubs last",   lambda: draw_last_game(display, cache["cubs"]["last"],  "Last Cubs game...", transition=True)),
             ("cubs result", lambda: draw_cubs_result(display, cache["cubs"]["last"], transition=True)),
             ("cubs live",   lambda: draw_box_score(display,  cache["cubs"]["live"], "Cubs Live...", transition=True)),
-            ("cubs next",   lambda: draw_sports_screen(display, cache["cubs"]["next"], "Next Cubs game...", transition=True)),
+            ("cubs next",   lambda: draw_sports_screen(display, cubs_next, "Next Cubs game...", transition=True)),
             (
                 "cubs next home",
                 (
                     lambda: draw_next_home_game(
                         display,
-                        cache["cubs"]["next_home"],
+                        cubs_next_home,
                         transition=True,
                     )
-                ) if cache["cubs"]["next_home"] else None,
+                ) if cubs_next_home else None,
             ),
         ]
         screens = [s for s in screens if s]
 
     if any(cache["sox"].values()):
+        sox_next = cache["sox"].get("next")
+        sox_next_home = cache["sox"].get("next_home")
+        if _games_match(sox_next_home, sox_next):
+            sox_next_home = None
+
         screens += [
             ("sox logo",   (lambda: show_logo(sox_logo)) if sox_logo else None),
             ("sox stand1", lambda: draw_standings_screen1(display, cache["sox"]["stand"], os.path.join(IMAGES_DIR,"sox.jpg"), "AL Central", transition=True)),
             ("sox stand2", lambda: draw_standings_screen2(display, cache["sox"]["stand"], os.path.join(IMAGES_DIR,"sox.jpg"), transition=True)),
             ("sox last",   lambda: draw_last_game(display, cache["sox"]["last"], "Last Sox game...", transition=True)),
             ("sox live",   lambda: draw_box_score(display, cache["sox"]["live"], "Sox Live...", transition=True)),
-            ("sox next",   lambda: draw_sports_screen(display, cache["sox"]["next"], "Next Sox game...", transition=True)),
+            ("sox next",   lambda: draw_sports_screen(display, sox_next, "Next Sox game...", transition=True)),
             (
                 "sox next home",
                 (
                     lambda: draw_next_home_game(
                         display,
-                        cache["sox"]["next_home"],
+                        sox_next_home,
                         transition=True,
                     )
-                ) if cache["sox"]["next_home"] else None,
+                ) if sox_next_home else None,
             ),
         ]
         screens = [s for s in screens if s]
