@@ -60,11 +60,13 @@ from draw_hawks_schedule import (
     draw_last_hawks_game,
     draw_live_hawks_game,
     draw_sports_screen_hawks,
+    draw_hawks_next_home_game,
 )
 from mlb_schedule        import (
     draw_last_game,
     draw_box_score,
     draw_sports_screen,
+    draw_next_home_game,
     draw_cubs_result,
 )
 from mlb_team_standings  import (
@@ -240,9 +242,9 @@ bears_logo  = load_logo("bears.png")
 # ─── Data cache & refresh ────────────────────────────────────────────────────
 cache = {
     "weather": None,
-    "hawks":   {"last":None, "live":None, "next":None},
-    "cubs":    {"stand":None, "last":None, "live":None, "next":None},
-    "sox":     {"stand":None, "last":None, "live":None, "next":None},
+    "hawks":   {"last":None, "live":None, "next":None, "next_home":None},
+    "cubs":    {"stand":None, "last":None, "live":None, "next":None, "next_home":None},
+    "sox":     {"stand":None, "last":None, "live":None, "next":None, "next_home":None},
 }
 
 def refresh_all():
@@ -252,6 +254,7 @@ def refresh_all():
         "last": data_fetch.fetch_blackhawks_last_game(),
         "live": data_fetch.fetch_blackhawks_live_game(),
         "next": data_fetch.fetch_blackhawks_next_game(),
+        "next_home": data_fetch.fetch_blackhawks_next_home_game(),
     })
     cubg = data_fetch.fetch_cubs_games() or {}
     cache["cubs"].update({
@@ -259,6 +262,7 @@ def refresh_all():
         "last":  cubg.get("last_game"),
         "live":  cubg.get("live_game"),
         "next":  cubg.get("next_game"),
+        "next_home": cubg.get("next_home_game"),
     })
     soxg = data_fetch.fetch_sox_games() or {}
     cache["sox"].update({
@@ -266,6 +270,7 @@ def refresh_all():
         "last":  soxg.get("last_game"),
         "live":  soxg.get("live_game"),
         "next":  soxg.get("next_game"),
+        "next_home": soxg.get("next_home_game"),
     })
 
 threading.Thread(
@@ -305,6 +310,7 @@ def build_screens():
             ("hawks last", lambda: draw_last_hawks_game(display, cache["hawks"]["last"], transition=True)),
             ("hawks live", lambda: draw_live_hawks_game(display, cache["hawks"]["live"], transition=True)),
             ("hawks next", lambda: draw_sports_screen_hawks(display, cache["hawks"]["next"], transition=True)),
+            ("hawks next home", lambda: draw_hawks_next_home_game(display, cache["hawks"]["next_home"], transition=True)),
             ("nhl logo",   (lambda: show_logo(nhl_logo)) if nhl_logo else None),
             ("NHL Scoreboard", lambda: draw_nhl_scoreboard(display, transition=True)),
         ]
@@ -319,6 +325,7 @@ def build_screens():
             ("cubs result", lambda: draw_cubs_result(display, cache["cubs"]["last"], transition=True)),
             ("cubs live",   lambda: draw_box_score(display,  cache["cubs"]["live"], "Cubs Live...", transition=True)),
             ("cubs next",   lambda: draw_sports_screen(display, cache["cubs"]["next"], "Next Cubs game...", transition=True)),
+            ("cubs next home", lambda: draw_next_home_game(display, cache["cubs"]["next_home"], transition=True)),
         ]
         screens = [s for s in screens if s]
 
@@ -330,6 +337,7 @@ def build_screens():
             ("sox last",   lambda: draw_last_game(display, cache["sox"]["last"], "Last Sox game...", transition=True)),
             ("sox live",   lambda: draw_box_score(display, cache["sox"]["live"], "Sox Live...", transition=True)),
             ("sox next",   lambda: draw_sports_screen(display, cache["sox"]["next"], "Next Sox game...", transition=True)),
+            ("sox next home", lambda: draw_next_home_game(display, cache["sox"]["next_home"], transition=True)),
         ]
         screens = [s for s in screens if s]
 
