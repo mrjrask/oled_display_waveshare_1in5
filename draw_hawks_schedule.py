@@ -19,7 +19,7 @@ Blackhawks screens:
   * Bottom: Always includes time ("Today 7:30 PM", "Tomorrow 6:00 PM", or "Wed Sep 24 7:30 PM")
 
 - Next Hawks home game:
-  * Title: "Following Home Game..."
+  * Title: "Next at home..."
   * Layout matches the standard next-game card
 
 Function signatures (match main.py):
@@ -954,5 +954,5 @@ def draw_sports_screen_hawks(display, game, transition: bool=False):
 
 
 def draw_hawks_next_home_game(display, game, transition: bool=False):
-    """Dedicated "Following Home Game..." card using the same layout as the next-game screen."""
-    return _draw_next_card(display, game, title="Following Home Game...", transition=transition, log_label="hawks next home")
+    """Dedicated "Next at home..." card using the same layout as the next-game screen."""
+    return _draw_next_card(display, game, title="Next at home...", transition=transition, log_label="hawks next home")
