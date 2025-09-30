@@ -118,8 +118,18 @@ def _load_intro_logo() -> Optional[Image.Image]:
 
 
 def _render_intro_frame(logo: Image.Image, scale: float) -> Image.Image:
-    w = max(1, int(round(logo.width * scale)))
-    h = max(1, int(round(logo.height * scale)))
+    if logo.width > 0 and logo.height > 0:
+        base_scale = min(WIDTH / logo.width, HEIGHT / logo.height)
+    else:
+        base_scale = 1.0
+
+    effective_scale = max(0.0, base_scale * scale)
+    if effective_scale <= 0:
+        effective_scale = base_scale
+    effective_scale = min(effective_scale, base_scale)
+
+    w = max(1, int(round(logo.width * effective_scale)))
+    h = max(1, int(round(logo.height * effective_scale)))
     resized = logo.resize((w, h), RESAMPLE)
     frame = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 255))
     x = (WIDTH - resized.width) // 2
