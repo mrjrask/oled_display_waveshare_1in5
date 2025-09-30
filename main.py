@@ -349,8 +349,6 @@ def build_screens():
         ("bears next",   lambda: show_bears_next_game(display, transition=True)),
         ("nfl logo",     (lambda: show_logo(nfl_logo)) if nfl_logo else None),
         ("NFL Scoreboard", lambda: draw_nfl_scoreboard(display, transition=True)),
-        ("nba logo",     show_nba_logo_screen if nba_logo else None),
-        ("NBA Scoreboard", lambda: draw_nba_scoreboard(display, transition=True)),
     ]
     screens = [s for s in screens if s]
 
@@ -436,6 +434,8 @@ def build_screens():
     screens += [
         ("mlb logo",     (lambda: show_logo(mlb_logo)) if mlb_logo else None),
         ("MLB Scoreboard", lambda: draw_mlb_scoreboard(display, transition=True)),
+        ("nba logo",     show_nba_logo_screen if nba_logo else None),
+        ("NBA Scoreboard", lambda: draw_nba_scoreboard(display, transition=True)),
         ("NL Overview",  lambda: draw_NL_Overview(display, transition=True)),
         ("NL East",      lambda: draw_NL_East(display, transition=True)),
         ("NL Central",   lambda: draw_NL_Central(display, transition=True)),
