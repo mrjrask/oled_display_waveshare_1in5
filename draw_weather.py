@@ -26,10 +26,18 @@ from config import (
     FONT_WEATHER_LABEL,
     FONT_WEATHER_DETAILS,
     FONT_WEATHER_DETAILS_BOLD,
+    FONT_EMOJI,
     WEATHER_ICON_SIZE,
     WEATHER_DESC_GAP,
 )
-from utils import clear_display, fetch_weather_icon, log_call, timestamp_to_datetime, uv_index_color
+from utils import (
+    clear_display,
+    fetch_weather_icon,
+    log_call,
+    timestamp_to_datetime,
+    uv_index_color,
+    wind_direction,
+)
 
 # ─── Screen 1: Basic weather + two-line Feels/Hi/Lo ────────────────────────────
 @log_call
@@ -71,6 +79,42 @@ def draw_weather_screen_1(display, weather, transition=False):
     icon_code = current.get("weather", [{}])[0].get("icon")
     icon_img = fetch_weather_icon(icon_code, WEATHER_ICON_SIZE)
 
+    cloud_cover = current.get("clouds")
+    try:
+        cloud_cover = int(round(float(cloud_cover)))
+    except Exception:
+        cloud_cover = None
+
+    pop_raw = daily.get("pop")
+    if pop_raw is None:
+        pop_raw = daily.get("probabilityOfPrecipitation")
+    try:
+        pop_val = float(pop_raw)
+        pop_pct = int(round(pop_val * 100)) if 0 <= pop_val <= 1 else int(round(pop_val))
+    except Exception:
+        pop_pct = None
+
+    daily_weather_list = daily.get("weather") if isinstance(daily.get("weather"), list) else []
+    daily_weather = (daily_weather_list or [{}])[0]
+    weather_id = daily_weather.get("id")
+    weather_main = (daily_weather.get("main") or "").strip().lower()
+    is_snow = False
+    if weather_main == "snow":
+        is_snow = True
+    elif isinstance(weather_id, int) and 600 <= weather_id < 700:
+        is_snow = True
+    elif daily.get("snow") or current.get("snow"):
+        is_snow = True
+
+    precip_emoji = "\N{SNOWFLAKE}" if is_snow else "\N{DROPLET}"
+    precip_pct = None
+    if pop_pct is not None:
+        precip_pct = max(0, min(pop_pct, 100))
+
+    cloud_pct = None
+    if cloud_cover is not None:
+        cloud_pct = max(0, min(cloud_cover, 100))
+
     # Feels/Hi/Lo groups
     labels    = ["Feels", "Hi", "Lo"]
     values    = [f"{feels}°", f"{hi}°", f"{lo}°"]
@@ -103,10 +147,56 @@ def draw_weather_screen_1(display, weather, transition=False):
     y_lbl     = y_val - max_lbl_h - LABEL_GAP
 
     # paste icon between desc and labels
+    top_of_icons = h_temp + h_desc + WEATHER_DESC_GAP * 2
+    y_icon = top_of_icons + ((y_lbl - top_of_icons - WEATHER_ICON_SIZE)//2)
+    icon_x = (WIDTH - WEATHER_ICON_SIZE) // 2
+    icon_center_y = top_of_icons + max(0, (y_lbl - top_of_icons) // 2)
+
     if icon_img:
-        top_of_icons = h_temp + h_desc + WEATHER_DESC_GAP * 2
-        y_icon = top_of_icons + ((y_lbl - top_of_icons - WEATHER_ICON_SIZE)//2)
-        img.paste(icon_img, ((WIDTH - WEATHER_ICON_SIZE)//2, y_icon), icon_img)
+        img.paste(icon_img, (icon_x, y_icon), icon_img)
+
+    side_font = FONT_WEATHER_DETAILS
+    emoji_font = FONT_EMOJI
+    block_gap = 2
+
+    if precip_pct is not None:
+        precip_color = (173, 216, 230) if precip_emoji == "\N{SNOWFLAKE}" else (135, 206, 250)
+        precip_pct_text = f"{precip_pct}%"
+        pct_w, pct_h = draw.textsize(precip_pct_text, font=side_font)
+        emoji_w, emoji_h = draw.textsize(precip_emoji, font=emoji_font)
+        block_w = max(pct_w, emoji_w)
+        block_h = emoji_h + block_gap + pct_h
+        precip_x = icon_x - 6 - block_w
+        if precip_x < 0:
+            precip_x = 0
+        block_center_y = icon_center_y
+        block_top_y = block_center_y - block_h // 2
+        emoji_x = precip_x + (block_w - emoji_w) // 2
+        pct_x = precip_x + (block_w - pct_w) // 2
+        emoji_y = block_top_y
+        pct_y = emoji_y + emoji_h + block_gap
+        draw.text((emoji_x, emoji_y), precip_emoji, font=emoji_font, fill=precip_color)
+        draw.text((pct_x, pct_y), precip_pct_text, font=side_font, fill=precip_color)
+
+    if cloud_pct is not None:
+        cloud_emoji = "\N{CLOUD}"
+        cloud_color = (211, 211, 211)
+        cloud_pct_text = f"{cloud_pct}%"
+        pct_w, pct_h = draw.textsize(cloud_pct_text, font=side_font)
+        emoji_w, emoji_h = draw.textsize(cloud_emoji, font=emoji_font)
+        block_w = max(pct_w, emoji_w)
+        block_h = emoji_h + block_gap + pct_h
+        cloud_x = icon_x + WEATHER_ICON_SIZE + 6
+        if cloud_x + block_w > WIDTH:
+            cloud_x = max(WIDTH - block_w, 0)
+        block_center_y = icon_center_y
+        block_top_y = block_center_y - block_h // 2
+        emoji_x = cloud_x + (block_w - emoji_w) // 2
+        pct_x = cloud_x + (block_w - pct_w) // 2
+        emoji_y = block_top_y
+        pct_y = emoji_y + emoji_h + block_gap
+        draw.text((emoji_x, emoji_y), cloud_emoji, font=emoji_font, fill=cloud_color)
+        draw.text((pct_x, pct_y), cloud_pct_text, font=side_font, fill=cloud_color)
 
     # draw groups
     x = x0
@@ -145,8 +235,14 @@ def draw_weather_screen_2(display, weather, transition=False):
         items = []
 
     # Other details
+    wind_speed = round(current.get('wind_speed', 0))
+    wind_dir = wind_direction(current.get('wind_deg'))
+    wind_value = f"{wind_speed} mph"
+    if wind_dir:
+        wind_value = f"{wind_value} {wind_dir}"
+
     items += [
-        ("Wind:",     f"{round(current.get('wind_speed',0))} mph"),
+        ("Wind:",     wind_value),
         ("Gust:",     f"{round(current.get('wind_gust',0))} mph"),
         ("Humidity:", f"{current.get('humidity',0)}%"),
         ("Pressure:", f"{round(current.get('pressure',0)*0.0338639,2)} inHg"),

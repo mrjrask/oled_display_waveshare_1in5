@@ -660,7 +660,6 @@ def _scroll_display(display, full_img: Image.Image):
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
 def draw_nba_scoreboard(display, transition: bool = False):
-    play_nba_logo_animation(display, hold=INTRO_ANIM_HOLD)
     games = _fetch_games_for_date(_scoreboard_date())
 
     if not games:

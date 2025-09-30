@@ -142,6 +142,10 @@ FONT_DIV_GB             = _load_font("DejaVuSans.ttf",      10)
 FONT_GB_VALUE           = _load_font("DejaVuSans.ttf",      10)
 FONT_GB_LABEL           = _load_font("DejaVuSans.ttf",      8)
 
+# Symbola (packaged as `ttf-ancient-fonts` on Debian/Ubuntu) provides monochrome
+# emoji glyphs that render reliably on the ePaper display. We fall back to the
+# default PIL bitmap font if Symbola cannot be located so screens stay legible
+# even without the optional package.
 _symbola_paths = glob.glob("/usr/share/fonts/**/*.ttf", recursive=True)
 _symbola = next((p for p in _symbola_paths if "symbola" in p.lower()), None)
 FONT_EMOJI = ImageFont.truetype(_symbola, 16) if _symbola else ImageFont.load_default()
