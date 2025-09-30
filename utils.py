@@ -24,7 +24,7 @@ import math
 import requests
 import spidev
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
 
 # ─── Pillow compatibility shim ─────────────────────────────────────────────
 # Re-add ImageDraw.textsize if missing (Pillow ≥10 compatibility)
@@ -358,11 +358,32 @@ def next_game_from_schedule(schedule: List[Dict[str, Any]], today: Optional[date
     return sorted(upcoming, key=lambda item: item[0])[0][1]
 
 
+_LOGO_BRIGHTNESS_OVERRIDES: dict[tuple[str, str], float] = {
+    ("nhl", "WAS"): 1.35,
+    ("nhl", "TBL"): 1.35,
+    ("nhl", "TB"): 1.35,
+    ("nfl", "NYJ"): 1.4,
+    ("mlb", "SD"): 1.35,
+    ("mlb", "DET"): 1.35,
+    ("mlb", "NYY"): 1.35,
+}
+
+
+def _adjust_logo_brightness(logo: Image.Image, base_dir: str, abbr: str) -> Image.Image:
+    sport = os.path.basename(os.path.normpath(base_dir or ""))
+    key = (sport.lower(), (abbr or "").upper())
+    factor = _LOGO_BRIGHTNESS_OVERRIDES.get(key)
+    if not factor:
+        return logo
+    return ImageEnhance.Brightness(logo).enhance(factor)
+
+
 def load_team_logo(base_dir: str, abbr: str, height: int = 36) -> Image.Image | None:
     filename = f"{abbr}.png"
     path = os.path.join(base_dir, filename)
     try:
         logo = Image.open(path).convert("RGBA")
+        logo = _adjust_logo_brightness(logo, base_dir, abbr)
         ratio = height / logo.height
         return logo.resize((int(logo.width * ratio), height), Image.ANTIALIAS)
     except Exception as exc:
