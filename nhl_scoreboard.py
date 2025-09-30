@@ -139,6 +139,25 @@ def _score_text(side: dict, *, show: bool) -> str:
     return "—" if score is None else str(score)
 
 
+def _normalize_period_for_display(period_ord: str) -> str:
+    if not isinstance(period_ord, str):
+        return ""
+    text = period_ord.strip().upper()
+    if not text:
+        return ""
+    if text in {"OT", "SO"}:
+        return text
+    if text.endswith("TH"):
+        try:
+            value = int(text[:-2])
+        except ValueError:
+            return text
+        if value >= 4:
+            overtime_number = value - 3
+            return "OT" if overtime_number == 1 else f"{overtime_number}OT"
+    return text
+
+
 def _format_status(game: dict) -> str:
     status = (game or {}).get("status", {}) or {}
     linescore = (game or {}).get("linescore", {}) or {}
@@ -152,7 +171,7 @@ def _format_status(game: dict) -> str:
         return detailed or "Suspended"
 
     if abstract in {"final", "completed"} or "final" in detailed_lower or status.get("statusCode") == "4":
-        period_ord = (linescore.get("currentPeriodOrdinal") or "").upper()
+        period_ord = _normalize_period_for_display(linescore.get("currentPeriodOrdinal"))
         if linescore.get("hasShootout"):
             return "Final/SO"
         if period_ord and period_ord not in {"1ST", "2ND", "3RD"}:
@@ -162,7 +181,7 @@ def _format_status(game: dict) -> str:
     if abstract == "live" or status.get("statusCode") == "3" or "progress" in detailed_lower:
         intermission = linescore.get("intermissionInfo") or {}
         in_intermission = intermission.get("inIntermission")
-        period_ord = (linescore.get("currentPeriodOrdinal") or "").upper()
+        period_ord = _normalize_period_for_display(linescore.get("currentPeriodOrdinal"))
         time_remaining = (linescore.get("currentPeriodTimeRemaining") or "").upper()
         if in_intermission:
             return f"INT {period_ord}".strip()

@@ -29,7 +29,14 @@ from config import (
     WEATHER_ICON_SIZE,
     WEATHER_DESC_GAP,
 )
-from utils import clear_display, fetch_weather_icon, log_call, timestamp_to_datetime, uv_index_color
+from utils import (
+    clear_display,
+    fetch_weather_icon,
+    log_call,
+    timestamp_to_datetime,
+    uv_index_color,
+    wind_direction,
+)
 
 # ─── Screen 1: Basic weather + two-line Feels/Hi/Lo ────────────────────────────
 @log_call
@@ -71,6 +78,42 @@ def draw_weather_screen_1(display, weather, transition=False):
     icon_code = current.get("weather", [{}])[0].get("icon")
     icon_img = fetch_weather_icon(icon_code, WEATHER_ICON_SIZE)
 
+    cloud_cover = current.get("clouds")
+    try:
+        cloud_cover = int(round(float(cloud_cover)))
+    except Exception:
+        cloud_cover = None
+
+    pop_raw = daily.get("pop")
+    if pop_raw is None:
+        pop_raw = daily.get("probabilityOfPrecipitation")
+    try:
+        pop_val = float(pop_raw)
+        pop_pct = int(round(pop_val * 100)) if 0 <= pop_val <= 1 else int(round(pop_val))
+    except Exception:
+        pop_pct = None
+
+    daily_weather_list = daily.get("weather") if isinstance(daily.get("weather"), list) else []
+    daily_weather = (daily_weather_list or [{}])[0]
+    weather_id = daily_weather.get("id")
+    weather_main = (daily_weather.get("main") or "").strip().lower()
+    is_snow = False
+    if weather_main == "snow":
+        is_snow = True
+    elif isinstance(weather_id, int) and 600 <= weather_id < 700:
+        is_snow = True
+    elif daily.get("snow") or current.get("snow"):
+        is_snow = True
+
+    precip_emoji = "❄️" if is_snow else "💧"
+    precip_text = None
+    if pop_pct is not None:
+        precip_text = f"{precip_emoji} {max(0, min(pop_pct, 100))}%"
+
+    cloud_text = None
+    if cloud_cover is not None:
+        cloud_text = f"☁️ {max(0, min(cloud_cover, 100))}%"
+
     # Feels/Hi/Lo groups
     labels    = ["Feels", "Hi", "Lo"]
     values    = [f"{feels}°", f"{hi}°", f"{lo}°"]
@@ -103,10 +146,30 @@ def draw_weather_screen_1(display, weather, transition=False):
     y_lbl     = y_val - max_lbl_h - LABEL_GAP
 
     # paste icon between desc and labels
+    top_of_icons = h_temp + h_desc + WEATHER_DESC_GAP * 2
+    y_icon = top_of_icons + ((y_lbl - top_of_icons - WEATHER_ICON_SIZE)//2)
+    icon_x = (WIDTH - WEATHER_ICON_SIZE) // 2
+    icon_center_y = top_of_icons + max(0, (y_lbl - top_of_icons) // 2)
+
     if icon_img:
-        top_of_icons = h_temp + h_desc + WEATHER_DESC_GAP * 2
-        y_icon = top_of_icons + ((y_lbl - top_of_icons - WEATHER_ICON_SIZE)//2)
-        img.paste(icon_img, ((WIDTH - WEATHER_ICON_SIZE)//2, y_icon), icon_img)
+        img.paste(icon_img, (icon_x, y_icon), icon_img)
+
+    side_font = FONT_WEATHER_DETAILS
+    if precip_text:
+        precip_w, precip_h = draw.textsize(precip_text, font=side_font)
+        precip_x = icon_x - 6 - precip_w
+        if precip_x < 0:
+            precip_x = 0
+        precip_y = icon_center_y - precip_h // 2
+        draw.text((precip_x, precip_y), precip_text, font=side_font, fill=(173, 216, 230) if precip_emoji == "❄️" else (135, 206, 250))
+
+    if cloud_text:
+        cloud_w, cloud_h = draw.textsize(cloud_text, font=side_font)
+        cloud_x = icon_x + WEATHER_ICON_SIZE + 6
+        if cloud_x + cloud_w > WIDTH:
+            cloud_x = WIDTH - cloud_w
+        cloud_y = icon_center_y - cloud_h // 2
+        draw.text((cloud_x, cloud_y), cloud_text, font=side_font, fill=(211, 211, 211))
 
     # draw groups
     x = x0
@@ -145,8 +208,14 @@ def draw_weather_screen_2(display, weather, transition=False):
         items = []
 
     # Other details
+    wind_speed = round(current.get('wind_speed', 0))
+    wind_dir = wind_direction(current.get('wind_deg'))
+    wind_value = f"{wind_speed} mph"
+    if wind_dir:
+        wind_value = f"{wind_value} {wind_dir}"
+
     items += [
-        ("Wind:",     f"{round(current.get('wind_speed',0))} mph"),
+        ("Wind:",     wind_value),
         ("Gust:",     f"{round(current.get('wind_gust',0))} mph"),
         ("Humidity:", f"{current.get('humidity',0)}%"),
         ("Pressure:", f"{round(current.get('pressure',0)*0.0338639,2)} inHg"),
