@@ -63,7 +63,8 @@ CENTER_FONT = clone_font(FONT_STATUS, 15)
 TITLE_FONT  = FONT_TITLE_SPORTS
 LOGO_HEIGHT = 22
 LOGO_DIR    = os.path.join(IMAGES_DIR, "nba")
-INTRO_LOGO  = "NBA.png"
+INTRO_LOGO        = "NBA.png"
+INTRO_MAX_HEIGHT  = 100
 INTRO_ANIM_SCALES = (0.45, 0.6, 0.75, 0.9, 1.04, 0.98, 1.0)
 INTRO_ANIM_DELAY  = 0.06
 INTRO_ANIM_HOLD   = 0.4
@@ -126,7 +127,10 @@ def _render_intro_frame(logo: Image.Image, scale: float) -> Image.Image:
     effective_scale = max(0.0, base_scale * scale)
     if effective_scale <= 0:
         effective_scale = base_scale
-    effective_scale = min(effective_scale, base_scale)
+    max_height_scale = (
+        INTRO_MAX_HEIGHT / logo.height if logo.height else base_scale
+    )
+    effective_scale = min(effective_scale, base_scale, max_height_scale)
 
     w = max(1, int(round(logo.width * effective_scale)))
     h = max(1, int(round(logo.height * effective_scale)))
