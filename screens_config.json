@@ -5,7 +5,7 @@
     "weather logo": 0,
     "weather1": 1,
     "weather2": 1,
-    "inside" : 1,
+    "inside": 1,
     "verano logo": 4,
     "vrnof": 4,
     "travel": 0,
@@ -46,12 +46,8 @@
     "AL East": 0,
     "AL Central": 0,
     "AL West": 0,
-    "AL Wild Card": 0
+    "AL Wild Card": 0,
     "nba logo": 0,
-    "NBA Scoreboard": 0,
+    "NBA Scoreboard": 0
   }
 }
-
-
-
-

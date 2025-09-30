@@ -103,7 +103,7 @@ Most runtime behavior is controlled in `config.py`:
 
 ### Screen sequencing
 
-`screens_config.json` lets you enable/disable screens and place them into numbered sequences. Example:
+`screens_config.json` lets you enable/disable screens and control how often they appear. Example:
 
 ```json
 {
@@ -120,9 +120,9 @@ Most runtime behavior is controlled in `config.py`:
 }
 ```
 
-- A value of **`false`** hides the screen.
-- A value of **`1`** shows the screen on **every** sequence.
-- Any value **`>1`** shows the screen only when the main loop is on that sequence number. The length of the cycle is the highest such number in the file.
+- A value of **`false`** (or `0`) hides the screen.
+- A value of **`1`** shows the screen on **every** loop.
+- Any value **`>1`** shows the screen once every _N_ loops (e.g., `4` → every fourth pass).
 
 ---
 

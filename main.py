@@ -110,16 +110,48 @@ ARCHIVE_THRESHOLD        = 500                  # archive when we reach this man
 SCREENSHOT_ARCHIVE_BASE  = os.path.join(SCRIPT_DIR, "screenshot_archive")
 ALLOWED_SCREEN_EXTS      = (".png", ".jpg", ".jpeg")  # images only
 
+def _normalize_frequency(screen_id: str, raw_value) -> int:
+    """Convert the raw JSON value into a positive integer frequency.
+
+    A value of 0/False disables the screen. Any invalid value falls back to 1.
+    """
+
+    if raw_value in (False, None):
+        return 0
+
+    try:
+        freq = int(raw_value)
+    except (TypeError, ValueError):
+        logging.warning(
+            f"Invalid frequency '{raw_value}' for screen '{screen_id}'. Defaulting to 1."
+        )
+        return 1
+
+    if freq <= 0:
+        return 0
+
+    return freq
+
+
 def load_screen_config():
     try:
-        return json.load(open(CONFIG_PATH)).get("screens", {})
+        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
     except Exception as e:
         logging.warning(f"Could not load screens_config.json: {e}")
         return {}
 
-user_cfg = load_screen_config()
-seq_vals = [v for v in user_cfg.values() if isinstance(v, int) and v > 1]
-MAX_SEQUENCE = max(seq_vals) if seq_vals else 1
+    screens = data.get("screens", {}) if isinstance(data, dict) else {}
+    frequencies = {
+        screen_id: _normalize_frequency(screen_id, raw)
+        for screen_id, raw in screens.items()
+    }
+    return frequencies
+
+
+screen_frequencies = load_screen_config()
+freq_vals = [v for v in screen_frequencies.values() if v > 1]
+MAX_FREQUENCY = max(freq_vals) if freq_vals else 1
 
 
 def _extract_team_id(blob):
@@ -159,7 +191,7 @@ def _games_match(game_a, game_b):
         return home_a and home_a == home_b and away_a and away_a == away_b
 
     return False
-logging.info(f"🔢 Sequence length determined: {MAX_SEQUENCE}")
+logging.info(f"🔁 Max configured screen frequency: every {MAX_FREQUENCY} loop(s)")
 
 # ─── Display & Wi-Fi monitor ─────────────────────────────────────────────────
 display = Display()
@@ -458,7 +490,6 @@ def main_loop():
     try:
         while True:
             loop_count += 1
-            seq_pos = ((loop_count - 1) % MAX_SEQUENCE) + 1
 
             # Wi-Fi outage handling
             if ENABLE_WIFI_MONITOR and wifi_utils.wifi_status != "ok":
@@ -482,19 +513,17 @@ def main_loop():
             all_screens = build_screens()
             filtered = []
             for sid, fn in all_screens:
-                cfg = user_cfg.get(sid, 1)
-                if cfg is False or cfg == 0:
+                freq = screen_frequencies.get(sid, 1)
+                if freq <= 0:
                     continue
-                try:
-                    pos = int(cfg)
-                except Exception:
-                    pos = 1
-                if pos == 1 or pos == seq_pos:
-                    filtered.append((sid, fn))
+                if loop_count % freq == 0:
+                    filtered.append((sid, fn, freq))
 
             # Present
-            for sid, fn in filtered:
-                logging.info(f"🎬 Presenting '{sid}' (seq {seq_pos})")
+            for sid, fn, freq in filtered:
+                logging.info(
+                    f"🎬 Presenting '{sid}' (loop {loop_count}, every {freq} loop(s))"
+                )
                 try:
                     img = fn()
                 except Exception as e:
