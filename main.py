@@ -87,7 +87,7 @@ from mlb_standings       import (
     draw_AL_WildCard,
 )
 from mlb_scoreboard      import draw_mlb_scoreboard
-from nba_scoreboard      import draw_nba_scoreboard, play_nba_logo_animation
+from nba_scoreboard      import draw_nba_scoreboard
 from nhl_scoreboard      import draw_nhl_scoreboard
 from nfl_scoreboard      import draw_nfl_scoreboard
 from draw_inside import draw_inside
@@ -329,10 +329,9 @@ def show_logo(img: Image.Image) -> Image.Image:
 
 
 def show_nba_logo_screen() -> Optional[Image.Image]:
-    frame = play_nba_logo_animation(display)
-    if frame is None and nba_logo:
-        return show_logo(nba_logo)
-    return frame
+    if not nba_logo:
+        return None
+    return show_logo(nba_logo)
 
 # ─── Build screen sequence ───────────────────────────────────────────────────
 def build_screens():
