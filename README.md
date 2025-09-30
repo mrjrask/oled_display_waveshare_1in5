@@ -132,6 +132,7 @@ Most runtime behavior is controlled in `config.py`:
 - **NFL logos:** for the Bears screen, `images/nfl/<abbr>.png` (e.g., `gb.png`, `min.png`).
 - **Cubs W/L flag:** use `images/W_flag.webp` and `images/L_flag.webp` (animated). If missing, the code falls back to `images/W.png` / `images/L.png`.
 - **Fonts:** copy `TimesSquare-m105.ttf`, `DejaVuSans.ttf`, `DejaVuSans-Bold.ttf` into `fonts/`.
+- **Emoji font:** install the Symbola font (package `ttf-ancient-fonts` on Debian/Ubuntu) or place `Symbola.ttf` in your system font directory so precipitation/cloud icons render correctly.
 
 ---
 
