@@ -365,7 +365,16 @@ def _scroll_display(display, full_img: Image.Image):
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
 def draw_mlb_scoreboard(display, transition: bool = False):
-    games = _fetch_games_for_date(_scoreboard_date())
+    now = datetime.datetime.now(CENTRAL_TIME)
+    target_date = _scoreboard_date(now)
+    games = _fetch_games_for_date(target_date)
+
+    if not games:
+        today = now.date()
+        if today != target_date:
+            today_games = _fetch_games_for_date(today)
+            if today_games:
+                games = today_games
 
     if not games:
         clear_display(display)
