@@ -290,9 +290,12 @@ def _scoreboard_date(now: Optional[datetime.datetime] = None) -> datetime.date:
 
 
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
+    # Explicitly request postseason game types (Wild Card → World Series)
+    # so the API continues to return games once the regular season ends.
     url = (
         "https://statsapi.mlb.com/api/v1/schedule"
         f"?sportId=1&date={day.isoformat()}&hydrate=team,linescore"
+        "&gameTypes=R,F,D,L,W"
     )
     try:
         response = requests.get(url, timeout=REQUEST_TIMEOUT)
