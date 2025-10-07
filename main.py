@@ -44,6 +44,7 @@ from config import (
 )
 from utils import (
     Display,
+    ScreenImage,
     clear_display,
     draw_text_centered,
     animate_fade_in,
@@ -525,13 +526,21 @@ def main_loop():
                     f"🎬 Presenting '{sid}' (loop {loop_count}, every {freq} loop(s))"
                 )
                 try:
-                    img = fn()
+                    result = fn()
                 except Exception as e:
                     logging.error(f"Error in screen '{sid}': {e}")
                     continue
 
+                already_displayed = False
+                img = None
+                if isinstance(result, ScreenImage):
+                    img = result.image
+                    already_displayed = result.displayed
+                elif isinstance(result, Image.Image):
+                    img = result
+
                 # Logos return an image directly
-                if "logo" in sid and img:
+                if "logo" in sid and isinstance(img, Image.Image):
                     if ENABLE_SCREENSHOTS:
                         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                         path = os.path.join(SCREENSHOT_DIR, f"{sid.replace(' ', '_')}_{ts}.png")
@@ -548,8 +557,9 @@ def main_loop():
                     continue
 
                 # Content screens
-                if img:
-                    animate_fade_in(display, img, steps=8, delay=0.015)
+                if isinstance(img, Image.Image):
+                    if not already_displayed:
+                        animate_fade_in(display, img, steps=8, delay=0.015)
                     if ENABLE_SCREENSHOTS:
                         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                         safe = sid.replace(" ", "_").replace(".", "")

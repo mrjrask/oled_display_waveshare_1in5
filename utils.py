@@ -16,6 +16,7 @@ import os
 import random
 import subprocess
 import time
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import functools
@@ -85,6 +86,24 @@ class Display:
     def show(self):
         # No-op: ShowImage pushes the buffer
         pass
+
+
+@dataclass
+class ScreenImage:
+    """Container for a rendered screen image.
+
+    Attributes
+    ----------
+    image:
+        The full PIL image representing the screen.
+    displayed:
+        Whether the image has already been pushed to the display by the
+        originating function. This allows callers to skip redundant redraws
+        while still accessing the image data (e.g., for screenshots).
+    """
+
+    image: Image.Image
+    displayed: bool = False
 
 # ─── Basic utilities ────────────────────────────────────────────────────────
 @log_call

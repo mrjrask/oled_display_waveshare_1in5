@@ -75,8 +75,13 @@ def invoke_screen(entry, display, namespace):
                 args.append(getattr(module,f"get_{p}")())
             else:
                 args.append(None)
-        img=fn(*args)
-        if img:
+        result = fn(*args)
+        already_displayed = False
+        img = result
+        if isinstance(result, utils.ScreenImage):
+            img = result.image
+            already_displayed = result.displayed
+        if img and not already_displayed:
             display.image(img)
         display.show()
         time.sleep(SCREEN_DELAY)

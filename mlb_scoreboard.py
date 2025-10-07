@@ -34,6 +34,7 @@ from config import (
     IMAGES_DIR,
 )
 from utils import (
+    ScreenImage,
     clear_display,
     clone_font,
     get_mlb_abbreviation,
@@ -367,7 +368,7 @@ def _scroll_display(display, full_img: Image.Image):
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
-def draw_mlb_scoreboard(display, transition: bool = False):
+def draw_mlb_scoreboard(display, transition: bool = False) -> ScreenImage:
     now = datetime.datetime.now(CENTRAL_TIME)
     target_date = _scoreboard_date(now)
     games = _fetch_games_for_date(target_date)
@@ -395,16 +396,16 @@ def draw_mlb_scoreboard(display, transition: bool = False):
         draw.text((tx, ty), TITLE, font=TITLE_FONT, fill=(255, 255, 255))
         _center_text(draw, "No games today", STATUS_FONT, 0, WIDTH, HEIGHT // 2 - STATUS_ROW_H // 2, STATUS_ROW_H)
         if transition:
-            return img
+            return ScreenImage(img, displayed=False)
         display.image(img)
         display.show()
         time.sleep(SCROLL_PAUSE_BOTTOM)
-        return None
+        return ScreenImage(img, displayed=True)
 
     full_img = _render_scoreboard(games)
     if transition:
         _scroll_display(display, full_img)
-        return None
+        return ScreenImage(full_img, displayed=True)
 
     if full_img.height <= HEIGHT:
         display.image(full_img)
@@ -412,7 +413,7 @@ def draw_mlb_scoreboard(display, transition: bool = False):
         time.sleep(SCROLL_PAUSE_BOTTOM)
     else:
         _scroll_display(display, full_img)
-    return None
+    return ScreenImage(full_img, displayed=True)
 
 
 if __name__ == "__main__":  # pragma: no cover
