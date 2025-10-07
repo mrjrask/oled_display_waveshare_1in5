@@ -47,6 +47,7 @@ def draw_weather_screen_1(display, weather, transition=False):
 
     current = weather.get("current", {})
     daily   = weather.get("daily", [{}])[0]
+    hourly  = weather.get("hourly") if isinstance(weather.get("hourly"), list) else None
 
     temp  = round(current.get("temp", 0))
     desc  = current.get("weather", [{}])[0].get("description", "").title()
@@ -85,14 +86,43 @@ def draw_weather_screen_1(display, weather, transition=False):
     except Exception:
         cloud_cover = None
 
-    pop_raw = daily.get("pop")
-    if pop_raw is None:
-        pop_raw = daily.get("probabilityOfPrecipitation")
-    try:
-        pop_val = float(pop_raw)
-        pop_pct = int(round(pop_val * 100)) if 0 <= pop_val <= 1 else int(round(pop_val))
-    except Exception:
-        pop_pct = None
+    def _pop_pct_from(entry):
+        if not isinstance(entry, dict):
+            return None
+        pop_raw = entry.get("pop")
+        if pop_raw is None:
+            pop_raw = entry.get("probabilityOfPrecipitation")
+        if pop_raw is None:
+            return None
+        try:
+            pop_val = float(pop_raw)
+        except Exception:
+            return None
+        if 0 <= pop_val <= 1:
+            pop_val *= 100
+        return int(round(pop_val))
+
+    pop_pct = None
+    next_hour = None
+    if hourly:
+        current_dt = current.get("dt")
+        if isinstance(current_dt, (int, float)):
+            for hour in hourly:
+                if not isinstance(hour, dict):
+                    continue
+                hour_dt = hour.get("dt")
+                if isinstance(hour_dt, (int, float)) and hour_dt > current_dt:
+                    next_hour = hour
+                    break
+        if next_hour is None:
+            if len(hourly) > 1 and isinstance(hourly[1], dict):
+                next_hour = hourly[1]
+            elif hourly and isinstance(hourly[0], dict):
+                next_hour = hourly[0]
+        pop_pct = _pop_pct_from(next_hour)
+
+    if pop_pct is None:
+        pop_pct = _pop_pct_from(daily)
 
     daily_weather_list = daily.get("weather") if isinstance(daily.get("weather"), list) else []
     daily_weather = (daily_weather_list or [{}])[0]
