@@ -14,10 +14,36 @@ DISPLAY_SERVICE = "oled_display.service"
 
 
 def load_screen_config():
+    """Return a mapping of screen id → frequency as integers.
+
+    The display runtime treats a value of 0/False as disabled, ``1`` as every
+    loop and any other positive integer as "once every N loops".  Older
+    configuration files may store booleans or strings, so we normalise the
+    values here before handing them to the template.
+    """
+
     try:
-        return json.load(open(CONFIG_PATH)).get("screens", {})
+        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
     except Exception:
         return {}
+
+    raw_screens = data.get("screens", {}) if isinstance(data, dict) else {}
+
+    normalised = {}
+    for screen_id, raw_value in raw_screens.items():
+        if raw_value in (False, None):
+            normalised[screen_id] = 0
+            continue
+
+        try:
+            freq = int(raw_value)
+        except (TypeError, ValueError):
+            freq = 1 if raw_value else 0
+
+        normalised[screen_id] = max(freq, 0)
+
+    return normalised
 
 
 @app.route("/")
@@ -31,10 +57,24 @@ def index():
 @app.route("/save_config", methods=["POST"])
 def save_config():
     data = request.get_json() or {}
-    screens = data.get("screens", {})
+    raw_screens = data.get("screens", {}) if isinstance(data, dict) else {}
+
+    screens = {}
+    for screen_id, raw_value in raw_screens.items():
+        if raw_value in (False, None, ""):
+            screens[screen_id] = 0
+            continue
+
+        try:
+            freq = int(raw_value)
+        except (TypeError, ValueError):
+            freq = 1 if raw_value else 0
+
+        screens[screen_id] = max(freq, 0)
+
     try:
-        with open(CONFIG_PATH, "w") as f:
-            json.dump({"screens": screens}, f, indent=2)
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"screens": screens}, f, indent=2, sort_keys=True)
         return jsonify(status="success")
     except Exception as e:
         return jsonify(status="error", message=str(e)), 500
