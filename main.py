@@ -41,6 +41,8 @@ from config import (
     ENABLE_VIDEO,
     VIDEO_FPS,
     ENABLE_WIFI_MONITOR,
+    TRAVEL_ACTIVE_WINDOW,
+    CENTRAL_TIME,
 )
 from utils import (
     Display,
@@ -378,6 +380,23 @@ def show_nba_logo_screen() -> Optional[Image.Image]:
         return None
     return show_logo(nba_logo)
 
+
+def _is_travel_screen_active() -> bool:
+    """Return True if the travel screen should be shown right now."""
+
+    start, end = TRAVEL_ACTIVE_WINDOW
+    now = datetime.datetime.now(CENTRAL_TIME).time()
+
+    if start <= end:
+        active = start <= now < end
+    else:  # window wraps past midnight
+        active = now >= start or now < end
+
+    if not active:
+        logging.debug("Skipping travel screen—outside active window.")
+
+    return active
+
 # ─── Build screen sequence ───────────────────────────────────────────────────
 def build_screens():
     screens = [
@@ -389,12 +408,20 @@ def build_screens():
         ("inside",       lambda: draw_inside(display, transition=True)),
         ("verano logo",  (lambda: show_logo(verano_img)) if verano_img else None),
         ("vrnof",        lambda: draw_vrnof_screen(display, "VRNOF", transition=True)),
-        ("travel",       lambda: draw_travel_time_screen(display, transition=True)),
+    ]
+
+    travel_active = _is_travel_screen_active()
+
+    if travel_active:
+        screens.append(("travel", lambda: draw_travel_time_screen(display, transition=True)))
+
+    screens += [
         ("bears logo",   (lambda: show_logo(bears_logo)) if bears_logo else None),
         ("bears next",   lambda: show_bears_next_game(display, transition=True)),
         ("nfl logo",     (lambda: show_logo(nfl_logo)) if nfl_logo else None),
         ("NFL Scoreboard", lambda: draw_nfl_scoreboard(display, transition=True)),
     ]
+
     screens = [s for s in screens if s]
 
     if any(cache["hawks"].values()):
