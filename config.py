@@ -52,7 +52,7 @@ else:
     LONGITUDE      = -87.6340
     TRAVEL_MODE    = "to_home"
 
-GOOGLE_MAPS_API_KEY = "AIzaSyBcRMSzun06PSffz9FWjV1NZg9MkjtFNq8"
+GOOGLE_MAPS_API_KEY = "AIzaSyBsDlAkPOgDRzCPjVaOpHjXZJVsSc-kZsg"
 
 # ─── Display configuration ─────────────────────────────────────────────────────
 WIDTH                    = 128
