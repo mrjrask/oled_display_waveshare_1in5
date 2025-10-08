@@ -151,8 +151,20 @@ def load_screen_config():
 
 
 screen_frequencies = load_screen_config()
-freq_vals = [v for v in screen_frequencies.values() if v > 1]
-MAX_FREQUENCY = max(freq_vals) if freq_vals else 1
+try:
+    _screen_config_mtime = os.path.getmtime(CONFIG_PATH)
+except OSError:
+    _screen_config_mtime = None
+
+
+def _recalculate_max_frequency():
+    global MAX_FREQUENCY
+    freq_vals = [v for v in screen_frequencies.values() if v > 1]
+    MAX_FREQUENCY = max(freq_vals) if freq_vals else 1
+
+
+MAX_FREQUENCY = 1
+_recalculate_max_frequency()
 
 
 def _extract_team_id(blob):
@@ -485,11 +497,33 @@ def build_screens():
 # ─── Main loop ───────────────────────────────────────────────────────────────
 loop_count = 0
 
+def refresh_screen_config_if_needed():
+    """Reload the screen configuration when the JSON file changes."""
+
+    global screen_frequencies, _screen_config_mtime
+
+    try:
+        mtime = os.path.getmtime(CONFIG_PATH)
+    except OSError:
+        mtime = None
+
+    if mtime == _screen_config_mtime:
+        return
+
+    screen_frequencies = load_screen_config()
+    _screen_config_mtime = mtime
+    _recalculate_max_frequency()
+    logging.info(
+        f"🔁 Reloaded screen configuration (max every {MAX_FREQUENCY} loop(s))"
+    )
+
+
 def main_loop():
     global loop_count
 
     try:
         while True:
+            refresh_screen_config_if_needed()
             loop_count += 1
 
             # Wi-Fi outage handling
