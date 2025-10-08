@@ -15,10 +15,10 @@ from PIL import Image, ImageDraw
 from config import (
     CENTRAL_TIME,
     FONT_SCORE,
-    FONT_STOCK_PRICE,
     FONT_TITLE_SPORTS,
     FONT_TRAVEL_HEADER,
     FONT_TRAVEL_TITLE,
+    FONT_TRAVEL_VALUE,
     GOOGLE_MAPS_API_KEY,
     HEIGHT,
     TRAVEL_ACTIVE_WINDOW,
@@ -31,7 +31,6 @@ from config import (
 from utils import (
     ScreenImage,
     choose_route_by_any,
-    clear_display,
     fastest_route,
     fetch_directions_routes,
     format_duration_text,
@@ -87,6 +86,12 @@ class TravelTimeResult:
 
     def normalized(self) -> str:
         return (self.value or "N/A").replace("mins", "min")
+
+
+SCROLL_STEP = 2
+SCROLL_DELAY = 0.035
+SCROLL_PAUSE_TOP = 1.0
+SCROLL_PAUSE_BOTTOM = 1.0
 
 
 def get_travel_times() -> Dict[str, TravelTimeResult]:
@@ -194,25 +199,13 @@ def _draw_green_sign(text: str, height: int = 36) -> Image.Image:
 def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     """Return a rendered travel time image for the provided timings."""
 
-    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
-    draw = ImageDraw.Draw(img)
+    measurement_draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
 
-    title_width, title_height = draw.textsize(TRAVEL_TITLE, font=FONT_TITLE_SPORTS)
-    draw.text(
-        ((WIDTH - title_width) // 2, 0),
-        TRAVEL_TITLE,
-        font=FONT_TITLE_SPORTS,
-        fill=(255, 255, 255),
-    )
-
-    top = title_height + 4
-    sign_height = 42
-    gap_horizontal = 4
-    gap_sign_time = 6
-    gap_time_label = 4
-    card_padding = 6
-    card_radius = 10
-    outer_margin = 4
+    def _measure(text: str, font) -> Tuple[int, int]:
+        if hasattr(measurement_draw, "textbbox"):
+            left, top, right, bottom = measurement_draw.textbbox((0, 0), text, font=font)
+            return right - left, bottom - top
+        return measurement_draw.textsize(text, font=font)
 
     lane_definitions: List[
         Tuple[str, str, Callable[[], Image.Image], Tuple[int, int, int]]
@@ -220,19 +213,19 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
         (
             "i94",
             "I-94",
-            lambda: _draw_interstate_shield("94", height=sign_height),
+            lambda: _draw_interstate_shield("94", height=28),
             (90, 160, 255),
         ),
         (
             "i90",
             "I-90",
-            lambda: _draw_interstate_shield("90", height=sign_height),
+            lambda: _draw_interstate_shield("90", height=28),
             (200, 170, 255),
         ),
         (
             "non_hw",
             "NON-HWY",
-            lambda: _draw_green_sign("NON-HWY", height=sign_height),
+            lambda: _draw_green_sign("NON-HWY", height=28),
             (160, 255, 160),
         ),
     ]
@@ -240,91 +233,123 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     lane_images: List[
         Tuple[Image.Image, TravelTimeResult, Tuple[int, int, int], str]
     ] = []
-    time_font = FONT_STOCK_PRICE
+    time_font = FONT_TRAVEL_VALUE
     label_font = FONT_TRAVEL_TITLE
-
-    time_metrics: List[Tuple[int, int]] = []
-    label_metrics: List[Tuple[int, int]] = []
-
-    def _measure(text: str, font) -> Tuple[int, int]:
-        if hasattr(draw, "textbbox"):
-            bbox = draw.textbbox((0, 0), text, font=font)
-            return bbox[2] - bbox[0], bbox[3] - bbox[1]
-        return draw.textsize(text, font=font)
 
     for key, label, factory, color in lane_definitions:
         time_result = times.get(key, TravelTimeResult("N/A"))
         sign_image = factory()
         lane_images.append((sign_image, time_result, color, label))
 
-        normalized = time_result.normalized()
-        time_metrics.append(_measure(normalized, time_font))
-        label_metrics.append(_measure(label, label_font))
+    title_width, title_height = _measure(TRAVEL_TITLE, FONT_TITLE_SPORTS)
 
-    max_time_height = max((height for _, height in time_metrics), default=0)
-    max_label_height = max((height for _, height in label_metrics), default=0)
+    outer_margin = 6
+    row_padding = 8
+    row_gap = 8
+    header_gap = 6
+    row_height = 28 + 2 * row_padding
 
-    card_height = (
-        card_padding
-        + sign_height
-        + gap_sign_time
-        + max_time_height
-        + gap_time_label
-        + max_label_height
-        + card_padding
+    all_na = all(result.normalized().upper() == "N/A" for _, result, _, _ in lane_images)
+    warning_text = "Travel data unavailable · Check Google Directions API"
+    warning_width, warning_height = _measure(warning_text, FONT_TRAVEL_HEADER)
+
+    content_height = (
+        title_height
+        + header_gap
+        + len(lane_images) * row_height
+        + max(0, len(lane_images) - 1) * row_gap
+        + outer_margin
+    )
+    if all_na:
+        content_height += warning_height + 6
+
+    canvas_height = max(content_height, HEIGHT)
+    img = Image.new("RGB", (WIDTH, canvas_height), "black")
+    draw = ImageDraw.Draw(img)
+
+    draw.text(
+        ((WIDTH - title_width) // 2, 0),
+        TRAVEL_TITLE,
+        font=FONT_TITLE_SPORTS,
+        fill=(255, 255, 255),
     )
 
-    total_gap = gap_horizontal * (len(lane_images) - 1)
-    card_width = (
-        WIDTH - 2 * outer_margin - total_gap
-    ) // len(lane_images)
-    start_x = (WIDTH - (card_width * len(lane_images) + total_gap)) // 2
+    y = title_height + header_gap
+    row_left = outer_margin
+    row_right = WIDTH - outer_margin
+    row_inner_gap = 10
 
-    for index, (sign_image, time_result, color, label) in enumerate(lane_images):
+    for sign_image, time_result, color, label in lane_images:
         normalized = time_result.normalized()
-        fill_color = color if normalized.upper() != "N/A" else (180, 180, 180)
+        display_color = color if normalized.upper() != "N/A" else (180, 180, 180)
 
-        time_width, time_height = time_metrics[index]
-        label_width, label_height = label_metrics[index]
-
-        left = start_x + index * (card_width + gap_horizontal)
-        top_y = top
-        right = left + card_width
-        bottom = top_y + card_height
+        row_top = y
+        row_bottom = y + row_height
 
         draw.rounded_rectangle(
-            (left, top_y, right, bottom),
-            radius=card_radius,
-            fill=(20, 20, 20),
-            outline=(70, 70, 70),
+            (row_left, row_top, row_right, row_bottom),
+            radius=12,
+            fill=(18, 18, 18),
+            outline=(60, 60, 60),
         )
 
-        sign_x = left + (card_width - sign_image.width) // 2
-        sign_y = top_y + card_padding
+        sign_x = row_left + row_padding
+        sign_y = row_top + (row_height - sign_image.height) // 2
         img.paste(sign_image, (sign_x, sign_y), sign_image)
 
-        time_x = left + (card_width - time_width) // 2
-        time_y = sign_y + sign_height + gap_sign_time
-        draw.text((time_x, time_y), normalized, font=time_font, fill=fill_color)
+        text_left = sign_x + sign_image.width + row_inner_gap
+        time_width, time_height = _measure(normalized, time_font)
+        time_x = row_right - row_padding - time_width
+        time_y = row_top + (row_height - time_height) // 2
+        draw.text((time_x, time_y), normalized, font=time_font, fill=display_color)
 
-        label_x = left + (card_width - label_width) // 2
-        label_y = time_y + time_height + gap_time_label
-        draw.text((label_x, label_y), label, font=label_font, fill=(220, 220, 220))
+        label_width, label_height = _measure(label, label_font)
+        label_x = text_left
+        label_y = row_bottom - row_padding - label_height
+        draw.text((label_x, label_y), label, font=label_font, fill=(210, 210, 210))
 
-    cards_bottom = top + card_height
+        y = row_bottom + row_gap
 
-    if all(result.normalized().upper() == "N/A" for _, result, _, _ in lane_images):
-        warning = "Travel data unavailable · Check Google Directions API"
-        warning_width, warning_height = draw.textsize(warning, font=FONT_TRAVEL_HEADER)
-        warning_y = min(HEIGHT - warning_height - 2, cards_bottom + 6)
+    if all_na:
+        warning_y = min(canvas_height - warning_height - 4, y)
         draw.text(
             ((WIDTH - warning_width) // 2, warning_y),
-            warning,
+            warning_text,
             font=FONT_TRAVEL_HEADER,
             fill=(200, 200, 200),
         )
 
     return img
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Display helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _scroll_travel_display(display, full_img: Image.Image) -> None:
+    if display is None:
+        return
+
+    if full_img.height <= HEIGHT:
+        display.image(full_img)
+        display.show()
+        time.sleep(SCROLL_PAUSE_BOTTOM)
+        return
+
+    max_offset = full_img.height - HEIGHT
+    frame = full_img.crop((0, 0, WIDTH, HEIGHT))
+    display.image(frame)
+    display.show()
+    time.sleep(SCROLL_PAUSE_TOP)
+
+    for offset in range(SCROLL_STEP, max_offset + 1, SCROLL_STEP):
+        frame = full_img.crop((0, offset, WIDTH, offset + HEIGHT))
+        display.image(frame)
+        display.show()
+        time.sleep(SCROLL_DELAY)
+
+    time.sleep(SCROLL_PAUSE_BOTTOM)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Public entry
@@ -356,14 +381,14 @@ def draw_travel_time_screen(
     times = get_travel_times()
     img = _compose_travel_image(times)
 
-    if transition:
-        return img
+    displayed = display is not None
 
-    clear_display(display)
-    display.image(img)
-    display.show()
-    time.sleep(4)
-    return ScreenImage(img, displayed=True)
+    if transition:
+        _scroll_travel_display(display, img)
+        return ScreenImage(img, displayed=displayed)
+
+    _scroll_travel_display(display, img)
+    return ScreenImage(img, displayed=displayed)
 
 
 __all__ = [
