@@ -230,26 +230,47 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
         ),
     ]
 
-    lane_images: List[
-        Tuple[Image.Image, TravelTimeResult, Tuple[int, int, int], str]
-    ] = []
+    rows: List[Dict[str, Any]] = []
     time_font = FONT_TRAVEL_VALUE
     label_font = FONT_TRAVEL_TITLE
 
+    max_sign_height = 0
+    max_time_height = 0
+    max_label_height = 0
+
     for key, label, factory, color in lane_definitions:
         time_result = times.get(key, TravelTimeResult("N/A"))
+        normalized = time_result.normalized()
         sign_image = factory()
-        lane_images.append((sign_image, time_result, color, label))
+        time_width, time_height = _measure(normalized, time_font)
+        label_width, label_height = _measure(label, label_font)
+
+        max_sign_height = max(max_sign_height, sign_image.height)
+        max_time_height = max(max_time_height, time_height)
+        max_label_height = max(max_label_height, label_height)
+
+        rows.append(
+            {
+                "sign": sign_image,
+                "normalized": normalized,
+                "color": color,
+                "label": label,
+                "time_width": time_width,
+                "time_height": time_height,
+                "label_width": label_width,
+                "label_height": label_height,
+            }
+        )
 
     title_width, title_height = _measure(TRAVEL_TITLE, FONT_TITLE_SPORTS)
 
     outer_margin = 6
-    row_padding = 8
-    row_gap = 8
+    row_padding = 12
+    row_gap = 10
     header_gap = 6
-    row_height = 28 + 2 * row_padding
+    row_height = max(max_sign_height, max_time_height, max_label_height) + 2 * row_padding
 
-    all_na = all(result.normalized().upper() == "N/A" for _, result, _, _ in lane_images)
+    all_na = all(row["normalized"].upper() == "N/A" for row in rows)
     warning_text = "Travel data unavailable · Check Google Directions API"
     warning_width, warning_height = _measure(warning_text, FONT_TRAVEL_HEADER)
 
@@ -279,9 +300,13 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     row_right = WIDTH - outer_margin
     row_inner_gap = 10
 
-    for sign_image, time_result, color, label in lane_images:
-        normalized = time_result.normalized()
-        display_color = color if normalized.upper() != "N/A" else (180, 180, 180)
+    for row in rows:
+        sign_image = row["sign"]
+        normalized = row["normalized"]
+        color = row["color"]
+        label = row["label"]
+
+        display_color = color if normalized.upper() != "N/A" else (230, 230, 230)
 
         row_top = y
         row_bottom = y + row_height
@@ -289,8 +314,8 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
         draw.rounded_rectangle(
             (row_left, row_top, row_right, row_bottom),
             radius=12,
-            fill=(18, 18, 18),
-            outline=(60, 60, 60),
+            fill=(28, 28, 28),
+            outline=(80, 80, 80),
         )
 
         sign_x = row_left + row_padding
@@ -298,15 +323,17 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
         img.paste(sign_image, (sign_x, sign_y), sign_image)
 
         text_left = sign_x + sign_image.width + row_inner_gap
-        time_width, time_height = _measure(normalized, time_font)
+        time_width = row["time_width"]
+        time_height = row["time_height"]
         time_x = row_right - row_padding - time_width
         time_y = row_top + (row_height - time_height) // 2
         draw.text((time_x, time_y), normalized, font=time_font, fill=display_color)
 
-        label_width, label_height = _measure(label, label_font)
+        label_width = row["label_width"]
+        label_height = row["label_height"]
         label_x = text_left
-        label_y = row_bottom - row_padding - label_height
-        draw.text((label_x, label_y), label, font=label_font, fill=(210, 210, 210))
+        label_y = row_top + (row_height - label_height) // 2
+        draw.text((label_x, label_y), label, font=label_font, fill=(235, 235, 235))
 
         y = row_bottom + row_gap
 
