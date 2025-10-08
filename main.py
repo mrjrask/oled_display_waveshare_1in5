@@ -410,10 +410,18 @@ def build_screens():
         ("vrnof",        lambda: draw_vrnof_screen(display, "VRNOF", transition=True)),
     ]
 
+    travel_freq = screen_frequencies.get("travel", 1)
+    travel_enabled = travel_freq > 0
     travel_active = _is_travel_screen_active()
 
-    if travel_active:
+    if travel_enabled:
+        if not travel_active:
+            logging.info(
+                "⏰ Travel screen enabled via config; overriding inactive window."
+            )
         screens.append(("travel", lambda: draw_travel_time_screen(display, transition=True)))
+    elif travel_active:
+        logging.debug("Travel screen active but disabled via config.")
 
     screens += [
         ("bears logo",   (lambda: show_logo(bears_logo)) if bears_logo else None),
