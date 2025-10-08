@@ -41,6 +41,8 @@ from config import (
     ENABLE_VIDEO,
     VIDEO_FPS,
     ENABLE_WIFI_MONITOR,
+    CENTRAL_TIME,
+    TRAVEL_ACTIVE_WINDOW,
 )
 from utils import (
     Display,
@@ -381,6 +383,8 @@ def show_nba_logo_screen() -> Optional[Image.Image]:
 
 # ─── Build screen sequence ───────────────────────────────────────────────────
 def build_screens():
+    global _travel_schedule_state
+
     screens = [
         ("date",         lambda: draw_date(display,   transition=False)),
         ("time",         lambda: draw_time(display,   transition=True)),
@@ -396,12 +400,38 @@ def build_screens():
     travel_enabled = travel_freq > 0
     travel_active = is_travel_screen_active()
 
+    start, end = TRAVEL_ACTIVE_WINDOW
+    now_time = datetime.datetime.now(CENTRAL_TIME).time()
+
+    def fmt_time(value: datetime.time) -> str:
+        return value.strftime("%I:%M %p").lstrip("0").replace(" 0", " ")
+
     if travel_enabled and travel_active:
+        state = "scheduled"
+        if _travel_schedule_state != state:
+            logging.info(
+                "🧭 Travel screen enabled (window %s – %s).",
+                fmt_time(start),
+                fmt_time(end),
+            )
         screens.append(("travel", lambda: draw_travel_time_screen(display, transition=True)))
     elif travel_enabled:
-        logging.debug("Travel screen enabled but outside active window.")
+        state = "outside_window"
+        if _travel_schedule_state != state:
+            logging.info(
+                "🧭 Travel screen skipped—outside active window (%s – %s, now %s).",
+                fmt_time(start),
+                fmt_time(end),
+                fmt_time(now_time),
+            )
     elif travel_active:
-        logging.debug("Travel screen active but disabled via config.")
+        state = "disabled"
+        if _travel_schedule_state != state:
+            logging.info("🧭 Travel screen disabled via configuration.")
+    else:
+        state = "inactive"
+
+    _travel_schedule_state = state
 
     screens += [
         ("bears logo",   (lambda: show_logo(bears_logo)) if bears_logo else None),
@@ -511,6 +541,7 @@ def build_screens():
 
 # ─── Main loop ───────────────────────────────────────────────────────────────
 loop_count = 0
+_travel_schedule_state: Optional[str] = None
 
 def refresh_screen_config_if_needed():
     """Reload the screen configuration when the JSON file changes."""
