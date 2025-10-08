@@ -6,6 +6,23 @@ import glob
 import os
 import subprocess
 
+# ─── Environment helpers ───────────────────────────────────────────────────────
+
+
+def _get_required_env_var(*names: str) -> str:
+    """Return the first populated environment variable from *names.*"""
+
+    for name in names:
+        value = os.environ.get(name)
+        if value:
+            return value
+
+    joined = ", ".join(names)
+    raise RuntimeError(
+        "Missing required environment variable. Set one of: "
+        f"{joined}"
+    )
+
 import pytz
 from PIL import ImageFont
 
@@ -35,24 +52,24 @@ CURRENT_SSID = get_current_ssid()
 
 if CURRENT_SSID == "Verano":
     ENABLE_WEATHER = True
-    OWM_API_KEY    = "48e7a54016d568a9712e62eef0e47830"
+    OWM_API_KEY    = _get_required_env_var("OWM_API_KEY_VERANO", "OWM_API_KEY")
     LATITUDE       = 41.9103
     LONGITUDE      = -87.6340
     TRAVEL_MODE    = "to_home"
 elif CURRENT_SSID == "wiffy":
     ENABLE_WEATHER = True
-    OWM_API_KEY    = "1dddbb920891c2797fe01427f4500ecd"
+    OWM_API_KEY    = _get_required_env_var("OWM_API_KEY_WIFFY", "OWM_API_KEY")
     LATITUDE       = 42.13444
     LONGITUDE      = -87.876389
     TRAVEL_MODE    = "to_work"
 else:
     ENABLE_WEATHER = True
-    OWM_API_KEY    = "48e7a54016d568a9712e62eef0e47830"
+    OWM_API_KEY    = _get_required_env_var("OWM_API_KEY_DEFAULT", "OWM_API_KEY")
     LATITUDE       = 41.9103
     LONGITUDE      = -87.6340
     TRAVEL_MODE    = "to_home"
 
-GOOGLE_MAPS_API_KEY = "AIzaSyBsDlAkPOgDRzCPjVaOpHjXZJVsSc-kZsg"
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
 # ─── Display configuration ─────────────────────────────────────────────────────
 WIDTH                    = 128

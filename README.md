@@ -96,8 +96,8 @@ Most runtime behavior is controlled in `config.py`:
 - **Display:** `WIDTH=128`, `HEIGHT=128`, `SPI_FREQUENCY=30_000_000`
 - **Intervals:** `SCREEN_DELAY`, `SCHEDULE_UPDATE_INTERVAL`
 - **Feature flags:** `ENABLE_SCREENSHOTS`, `ENABLE_VIDEO`, `ENABLE_WIFI_MONITOR`
-- **Weather:** `ENABLE_WEATHER`, `OWM_API_KEY`, `LATITUDE/LONGITUDE`
-- **Travel:** `GOOGLE_MAPS_API_KEY`, `TRAVEL_MODE` (`to_home` or `to_work`)
+- **Weather:** `ENABLE_WEATHER`, `LATITUDE/LONGITUDE`
+- **Travel:** `TRAVEL_MODE` (`to_home` or `to_work`)
 - **MLB:** constants and timezone `CENTRAL_TIME`
 - **Fonts:** make sure `fonts/` contains the TTFs above
 
@@ -123,6 +123,27 @@ Most runtime behavior is controlled in `config.py`:
 - A value of **`false`** (or `0`) hides the screen.
 - A value of **`1`** shows the screen on **every** loop.
 - Any value **`>1`** shows the screen once every _N_ loops (e.g., `4` → every fourth pass).
+
+---
+
+### Secrets & environment variables
+
+API keys are no longer stored directly in `config.py`. Set them as environment variables before running any of the
+scripts:
+
+- `OWM_API_KEY_VERANO`, `OWM_API_KEY_WIFFY`, or `OWM_API_KEY_DEFAULT` (fallback); the code also accepts a generic
+  `OWM_API_KEY` value if you only have a single OpenWeatherMap key.
+- `GOOGLE_MAPS_API_KEY` for travel-time requests (leave unset to disable that screen).
+
+You can export the variables in your shell session:
+
+```bash
+export OWM_API_KEY="your-open-weather-map-key"
+export GOOGLE_MAPS_API_KEY="your-google-maps-key"
+```
+
+Or copy `.env.example` to `.env` and load it with your preferred process manager or a tool such as
+[`python-dotenv`](https://github.com/theskumar/python-dotenv).
 
 ---
 
