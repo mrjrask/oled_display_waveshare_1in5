@@ -40,6 +40,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 import config
 from config import (
+    FONT_DATE_SPORTS,
+    FONT_TEAM_SPORTS,
+    FONT_TITLE_SPORTS,
     NHL_API_ENDPOINTS,
     NHL_FALLBACK_LOGO,
     NHL_IMAGES_DIR,
@@ -64,7 +67,7 @@ def _ts(size: int) -> ImageFont.ImageFont:
         except Exception:
             return ImageFont.load_default()
 
-# Try to reuse MLB's fonts for title and bottom date/time.
+# Try to reuse MLB's helper functions for title layout and date labels.
 _MLB = None
 try:
     import mlb_schedule as _MLB  # noqa: N816
@@ -75,18 +78,12 @@ _MLB_DRAW_TITLE = getattr(_MLB, "_draw_title_with_bold_result", None) if _MLB el
 _MLB_REL_DATE_ONLY = getattr(_MLB, "_rel_date_only", None) if _MLB else None
 _MLB_FORMAT_GAME_LABEL = getattr(_MLB, "_format_game_label", None) if _MLB else None
 
-def _pick_font_from_mlb(*names: str, fallback_size: int = 14) -> ImageFont.ImageFont:
-    if _MLB:
-        for nm in names:
-            f = getattr(_MLB, nm, None)
-            if isinstance(f, ImageFont.ImageFont):
-                return f
-    return _ts(fallback_size)
+# Title and footer fonts mirror the MLB screens via config definitions.
+FONT_TITLE  = FONT_TITLE_SPORTS
+FONT_BOTTOM = FONT_DATE_SPORTS
 
-# Title font follows MLB title exactly if available
-FONT_TITLE  = _pick_font_from_mlb("FONT_TITLE", "FONT_HEADER", fallback_size=(18 if HEIGHT > 64 else 16))
-# Footer/bottom line font follows MLB's small/footer if available
-FONT_BOTTOM = _pick_font_from_mlb("FONT_FOOTER", "FONT_SMALL", "FONT_SUB", fallback_size=(12 if HEIGHT > 64 else 10))
+# Opponent line on "Next" screens should mirror MLB's 20 pt team font.
+FONT_NEXT_OPP = FONT_TEAM_SPORTS
 
 # Scoreboard fonts (TimesSquare family as requested for numeric/abbr)
 FONT_ABBR  = _ts(18 if HEIGHT > 64 else 16)
@@ -772,8 +769,8 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     opp_full = _team_full_name(raw_home if is_hawks_away else raw_away) or (home_tri if is_hawks_away else away_tri)
     prefix   = "@ " if is_hawks_away else "vs. " if is_hawks_home else ""
     opp_line = f"{prefix}{opp_full or '—'}"
-    wrapped_h = _center_wrapped_text(d, y_top, opp_line, FONT_ABBR, max_width=WIDTH - 4)
-    y_top += wrapped_h + 1 if wrapped_h else _text_h(d, FONT_ABBR) + 1
+    wrapped_h = _center_wrapped_text(d, y_top, opp_line, FONT_NEXT_OPP, max_width=WIDTH - 4)
+    y_top += wrapped_h + 1 if wrapped_h else _text_h(d, FONT_NEXT_OPP) + 1
 
     # Bottom label text (we need its height to avoid overlap)
     official_date = game.get("officialDate") or ""
@@ -800,11 +797,11 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
 
     # Center '@' between logos
     at_txt = "@"
-    at_w   = _text_w(d, at_txt, FONT_ABBR)
-    at_h   = _text_h(d, FONT_ABBR)
+    at_w   = _text_w(d, at_txt, FONT_NEXT_OPP)
+    at_h   = _text_h(d, FONT_NEXT_OPP)
     at_x   = (WIDTH - at_w) // 2
     at_y   = row_y + (logo_h - at_h)//2
-    d.text((at_x, at_y), at_txt, font=FONT_ABBR, fill="white")
+    d.text((at_x, at_y), at_txt, font=FONT_NEXT_OPP, fill="white")
 
     # Away logo left of '@'
     if away_logo:
@@ -816,9 +813,9 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     else:
         # fallback text
         txt = (away_tri or "AWY")
-        tx  = (at_x - 6) // 2 - _text_w(d, txt, FONT_ABBR)//2
+        tx  = (at_x - 6) // 2 - _text_w(d, txt, FONT_NEXT_OPP)//2
         ty  = row_y + (logo_h - at_h)//2
-        d.text((tx, ty), txt, font=FONT_ABBR, fill="white")
+        d.text((tx, ty), txt, font=FONT_NEXT_OPP, fill="white")
 
     # Home logo right of '@'
     if home_logo:
@@ -830,9 +827,9 @@ def _draw_next_card(display, game: Dict, *, title: str, transition: bool=False, 
     else:
         # fallback text
         txt = (home_tri or "HME")
-        tx  = at_x + at_w + ((WIDTH - (at_x + at_w)) // 2) - _text_w(d, txt, FONT_ABBR)//2
+        tx  = at_x + at_w + ((WIDTH - (at_x + at_w)) // 2) - _text_w(d, txt, FONT_NEXT_OPP)//2
         ty  = row_y + (logo_h - at_h)//2
-        d.text((tx, ty), txt, font=FONT_ABBR, fill="white")
+        d.text((tx, ty), txt, font=FONT_NEXT_OPP, fill="white")
 
     # Bottom label (always includes time)
     if bottom_text:
