@@ -1,37 +1,35 @@
 #!/usr/bin/env python3
-"""
-Travel time screen (redesigned):
-- Three big lanes with road signs: I-94, I-90, and Non-Highway
-- Uses Google **Directions API** with alternatives + traffic (best_guess)
-- Falls back gracefully and never crashes the loop
-- Colorful, fully centered layout for 128×128
+"""Travel time screen helpers."""
 
-Notes
------
-• Requires an API key with **Directions API** enabled. (Distance Matrix not required, but you can enable it.)
-• We read the key from config.GOOGLE_MAPS_API_KEY, or env GOOGLE_MAPS_API_KEY if set.
-"""
-import os
-import time
+from __future__ import annotations
+
 import datetime as dt
 import logging
-from typing import Optional, Tuple, Dict, Any, List
+import os
+import time
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from PIL import Image, ImageDraw
 
 from config import (
-    WIDTH, HEIGHT,
     CENTRAL_TIME,
-    FONT_TRAVEL_TITLE, FONT_TRAVEL_HEADER, FONT_TRAVEL_VALUE,
-    FONT_TITLE_SPORTS, FONT_STOCK_PRICE, FONT_SCORE,
+    FONT_SCORE,
+    FONT_STOCK_PRICE,
+    FONT_TITLE_SPORTS,
+    FONT_TRAVEL_HEADER,
+    FONT_TRAVEL_TITLE,
     GOOGLE_MAPS_API_KEY,
-    TRAVEL_ORIGIN,
-    TRAVEL_DESTINATION,
-    TRAVEL_TITLE,
+    HEIGHT,
     TRAVEL_ACTIVE_WINDOW,
+    TRAVEL_DESTINATION,
     TRAVEL_DIRECTIONS_URL,
+    TRAVEL_ORIGIN,
+    TRAVEL_TITLE,
+    WIDTH,
 )
 from utils import (
+    ScreenImage,
     choose_route_by_any,
     clear_display,
     fastest_route,
@@ -66,171 +64,196 @@ def _pick_non_highway() -> Optional[dict]:
     return fastest_route(routes)
 
 
-def _pick_interstate(routes: list, i_label: str, synonyms: List[str]) -> Optional[dict]:
-    tokens = [i_label, i_label.replace("-", " "), i_label.replace("-", "-"), i_label.replace("-", ""), *synonyms]
-    match = choose_route_by_any(routes, tokens)
-    return match or fastest_route(routes)
+def _pick_interstate(routes: Iterable[dict], i_label: str, synonyms: Iterable[str]) -> Optional[dict]:
+    tokens = [
+        i_label,
+        i_label.replace("-", " "),
+        i_label.replace("-", ""),
+        *synonyms,
+    ]
+    routes_list = list(routes)
+    match = choose_route_by_any(routes_list, tokens)
+    return match or fastest_route(routes_list)
 
-def get_travel_times() -> Dict[str, str]:
-    """
-    Returns dictionary:
-      {
-        "i94": "12 min",
-        "i90": "14 min",
-        "non_hw": "29 min"
-      }
-    Any value may be "N/A" if nothing usable was returned.
-    """
+@dataclass
+class TravelTimeResult:
+    """Container for travel time results."""
+
+    value: str
+
+    @classmethod
+    def from_route(cls, route: Optional[dict]) -> "TravelTimeResult":
+        return cls(format_duration_text(route))
+
+    def normalized(self) -> str:
+        return (self.value or "N/A").replace("mins", "min")
+
+
+def get_travel_times() -> Dict[str, TravelTimeResult]:
+    """Return formatted travel times keyed by route identifier."""
+
     try:
         base = _fetch_routes(avoid_highways=False)
-        nonh = _pick_non_highway()
+        non_highway = _pick_non_highway()
 
-        # Robust picks with Chicago synonyms
-        r_i94 = _pick_interstate(base, "I-94", ["I94","Edens","Dan Ryan"])
-        r_i90 = _pick_interstate(base, "I-90", ["I90","Kennedy"])
+        r_i94 = _pick_interstate(base, "I-94", ["I94", "Edens", "Dan Ryan"])
+        r_i90 = _pick_interstate(base, "I-90", ["I90", "Kennedy"])
 
         return {
-            "i94":   format_duration_text(r_i94),
-            "i90":   format_duration_text(r_i90),
-            "non_hw": format_duration_text(nonh),
+            "i94": TravelTimeResult.from_route(r_i94),
+            "i90": TravelTimeResult.from_route(r_i90),
+            "non_hw": TravelTimeResult.from_route(non_highway),
         }
-    except Exception as e:
-        logging.warning("Travel time parse failed: %s", e)
-        return {"i94":"N/A","i90":"N/A","non_hw":"N/A"}
+    except Exception as exc:  # pragma: no cover - defensive guard for runtime issues
+        logging.warning("Travel time parse failed: %s", exc)
+        return {
+            "i94": TravelTimeResult("N/A"),
+            "i90": TravelTimeResult("N/A"),
+            "non_hw": TravelTimeResult("N/A"),
+        }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Drawing: interstate shields and green road sign
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _draw_interstate_shield(number: str, height: int = 36) -> Image.Image:
-    """
-    Interstate-style shield (approx):
-      - White outer stroke, then blue field
-      - Red top banner with 'INTERSTATE'
-      - Large white route number centered
-    """
-    # Canvas & proportions
-    w = int(height * 0.9)
-    img = Image.new("RGBA", (w, height), (0,0,0,0))
-    d = ImageDraw.Draw(img)
+    """Return an approximation of an interstate shield for the given number."""
 
-    # Outer white border via two rounded rects
+    width = int(height * 0.9)
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
     radius = max(6, height // 6)
-    d.rounded_rectangle((0, 0, w-1, height-1), radius=radius, fill=(255,255,255), outline=(255,255,255), width=2)
+    draw.rounded_rectangle(
+        (0, 0, width - 1, height - 1),
+        radius=radius,
+        fill=(255, 255, 255),
+        outline=(255, 255, 255),
+        width=2,
+    )
     inset = 3
-    d.rounded_rectangle((inset, inset, w-1-inset, height-1-inset), radius=radius-2, fill=(0, 65, 155))
+    draw.rounded_rectangle(
+        (inset, inset, width - 1 - inset, height - 1 - inset),
+        radius=radius - 2,
+        fill=(0, 65, 155),
+    )
 
-    # Red banner
-    band_h = max( int(height * 0.28), 12 )
-    d.rectangle((inset, inset, w-1-inset, inset + band_h), fill=(200, 30, 35))
+    banner_height = max(int(height * 0.28), 12)
+    draw.rectangle(
+        (inset, inset, width - 1 - inset, inset + banner_height),
+        fill=(200, 30, 35),
+    )
 
-    # 'INTERSTATE' label (tiny)
     try:
-        small = FONT_TRAVEL_HEADER
-        tw, th = d.textsize("INTERSTATE", font=small)
-        if tw < (w - 2*inset):
-            d.text(((w - tw)//2, inset + (band_h - th)//2), "INTERSTATE", font=small, fill=(255,255,255))
-    except Exception:
+        text_width, text_height = draw.textsize("INTERSTATE", font=FONT_TRAVEL_HEADER)
+        if text_width < (width - 2 * inset):
+            draw.text(
+                ((width - text_width) // 2, inset + (banner_height - text_height) // 2),
+                "INTERSTATE",
+                font=FONT_TRAVEL_HEADER,
+                fill=(255, 255, 255),
+            )
+    except Exception:  # pragma: no cover - defensive
         pass
 
-    # Big route number (white) centered in blue area
-    num_font = FONT_SCORE  # big, bold route number
-    label = str(number)
-    tw, th = d.textsize(label, font=num_font)
-    y_text = inset + band_h + ((height - inset - band_h) - th)//2
-    d.text(((w - tw)//2, y_text), label, font=num_font, fill=(255,255,255))
+    number_text = str(number)
+    num_width, num_height = draw.textsize(number_text, font=FONT_SCORE)
+    y_text = inset + banner_height + ((height - inset - banner_height) - num_height) // 2
+    draw.text(
+        ((width - num_width) // 2, y_text),
+        number_text,
+        font=FONT_SCORE,
+        fill=(255, 255, 255),
+    )
     return img
 
 def _draw_green_sign(text: str, height: int = 36) -> Image.Image:
-    """
-    Simple green highway-style sign for NON-HWY.
-    """
-    w = int(height * 1.5)
-    img = Image.new("RGBA", (w, height), (0,0,0,0))
-    d = ImageDraw.Draw(img)
-    border = 3
-    d.rounded_rectangle((0,0,w-1,height-1), radius=8, fill=(16,100,16), outline=(255,255,255), width=2)
-    # centered label
-    tw, th = d.textsize(text, font=FONT_TRAVEL_HEADER)
-    d.text(((w - tw)//2, (height - th)//2), text, font=FONT_TRAVEL_HEADER, fill=(255,255,255))
+    width = int(height * 1.5)
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle(
+        (0, 0, width - 1, height - 1),
+        radius=8,
+        fill=(16, 100, 16),
+        outline=(255, 255, 255),
+        width=2,
+    )
+    text_width, text_height = draw.textsize(text, font=FONT_TRAVEL_HEADER)
+    draw.text(
+        ((width - text_width) // 2, (height - text_height) // 2),
+        text,
+        font=FONT_TRAVEL_HEADER,
+        fill=(255, 255, 255),
+    )
     return img
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Composition
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _compose_travel_image(times: Dict[str,str]) -> Image.Image:
-    """
-    Build a full 128×128 image with title, three lanes, big times.
-    """
+def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
+    """Return a rendered travel time image for the provided timings."""
+
     img = Image.new("RGB", (WIDTH, HEIGHT), "black")
-    d   = ImageDraw.Draw(img)
+    draw = ImageDraw.Draw(img)
 
-    # Title (use global title style to match other pages)
-    tw, th = d.textsize(TRAVEL_TITLE, font=FONT_TITLE_SPORTS)
-    d.text(((WIDTH - tw)//2, 0), TRAVEL_TITLE, font=FONT_TITLE_SPORTS, fill=(255,255,255))
+    title_width, title_height = draw.textsize(TRAVEL_TITLE, font=FONT_TITLE_SPORTS)
+    draw.text(
+        ((WIDTH - title_width) // 2, 0),
+        TRAVEL_TITLE,
+        font=FONT_TITLE_SPORTS,
+        fill=(255, 255, 255),
+    )
 
-    # Layout constants
-    top = th + 4
-    sign_h = 46       # bigger signs
-    time_font = FONT_STOCK_PRICE  # BIG
-    gap_v  = 4
-    gap_h  = 6
+    top = title_height + 4
+    sign_height = 46
+    gap_vertical = 4
+    gap_horizontal = 6
 
-    # Three columns: I-94, I-90, NON-HWY
-    shield_94 = _draw_interstate_shield("94", height=sign_h)
-    shield_90 = _draw_interstate_shield("90", height=sign_h)
-    sign_non  = _draw_green_sign("NON-HWY", height=sign_h)
-
-    items = [
-        ("I-94", shield_94, times.get("i94","N/A"), (90,160,255)),  # bluish
-        ("I-90", shield_90, times.get("i90","N/A"), (200,170,255)), # violet
-        ("NON",  sign_non,  times.get("non_hw","N/A"), (160,255,160)), # green
+    lane_definitions: List[Tuple[str, Callable[[], Image.Image], Tuple[int, int, int]]] = [
+        ("i94", lambda: _draw_interstate_shield("94", height=sign_height), (90, 160, 255)),
+        ("i90", lambda: _draw_interstate_shield("90", height=sign_height), (200, 170, 255)),
+        ("non_hw", lambda: _draw_green_sign("NON-HWY", height=sign_height), (160, 255, 160)),
     ]
 
-    # Column widths are max(sign_w, time_w)
-    time_samples = []
-    for _, _, t, _ in items:
-        t_str = t if t else "N/A"
-        tw_, th_ = d.textsize(t_str, font=time_font)
-        time_samples.append((t_str, tw_, th_))
+    lane_images: List[Tuple[Image.Image, TravelTimeResult, Tuple[int, int, int]]] = []
+    for key, factory, color in lane_definitions:
+        lane_images.append((factory(), times.get(key, TravelTimeResult("N/A")), color))
 
-    sign_ws = [items[i][1].width for i in range(3)]
-    col_ws  = [max(sign_ws[i], time_samples[i][1]) for i in range(3)]
-    total_w = sum(col_ws) + gap_h * 2
-    x0 = (WIDTH - total_w)//2
+    time_font = FONT_STOCK_PRICE
+    column_widths = []
+    for sign_image, time_result, _ in lane_images:
+        time_text = time_result.value or "N/A"
+        width, _ = draw.textsize(time_text, font=time_font)
+        column_widths.append(max(sign_image.width, width))
 
-    # Draw columns
+    total_width = sum(column_widths) + gap_horizontal * (len(column_widths) - 1)
+    x_offset = (WIDTH - total_width) // 2
     y_sign = top
-    y_time = y_sign + sign_h + gap_v
+    y_time = y_sign + sign_height + gap_vertical
 
-    for i in range(3):
-        label, sign_img, t_str, color = items[i]
-        col_w = col_ws[i]
-        # paste sign centered in column
-        sx = x0 + (col_w - sign_img.width)//2
-        img.paste(sign_img, (sx, y_sign), sign_img)
+    for index, (sign_image, time_result, color) in enumerate(lane_images):
+        column_width = column_widths[index]
+        paste_x = x_offset + (column_width - sign_image.width) // 2
+        img.paste(sign_image, (paste_x, y_sign), sign_image)
 
-        # Draw time large and centered
-        # If value looks like "12 mins", normalize to "12 min"
-        t_norm = (t_str or "N/A").replace("mins", "min")
-        # Color gray if N/A
-        col_use = color if (t_norm.upper() != "N/A") else (180, 180, 180)
-        wt, ht = d.textsize(t_norm, font=time_font)
-        tx = x0 + (col_w - wt)//2
-        d.text((tx, y_time), t_norm, font=time_font, fill=col_use)
+        normalized = time_result.normalized()
+        fill_color = color if normalized.upper() != "N/A" else (180, 180, 180)
+        text_width, text_height = draw.textsize(normalized, font=time_font)
+        time_x = x_offset + (column_width - text_width) // 2
+        draw.text((time_x, y_time), normalized, font=time_font, fill=fill_color)
 
-        x0 += col_w + gap_h
+        x_offset += column_width + gap_horizontal
 
-    # If all values are N/A, show a subtle hint at bottom
-    t_i94 = items[0][2].upper()
-    t_i90 = items[1][2].upper()
-    t_non = items[2][2].upper()
-    all_na = (t_i94 == "N/A" and t_i90 == "N/A" and t_non == "N/A")
-    if all_na:
-        warn = "Travel data unavailable · Check Google Directions API"
-        ww, wh = d.textsize(warn, font=FONT_TRAVEL_HEADER)
-        d.text(((WIDTH - ww)//2, HEIGHT - wh - 1), warn, font=FONT_TRAVEL_HEADER, fill=(200,200,200))
+    if all(result.normalized().upper() == "N/A" for _, result, _ in lane_images):
+        warning = "Travel data unavailable · Check Google Directions API"
+        warning_width, warning_height = draw.textsize(warning, font=FONT_TRAVEL_HEADER)
+        draw.text(
+            ((WIDTH - warning_width) // 2, HEIGHT - warning_height - 1),
+            warning,
+            font=FONT_TRAVEL_HEADER,
+            fill=(200, 200, 200),
+        )
 
     return img
 
@@ -238,11 +261,9 @@ def _compose_travel_image(times: Dict[str,str]) -> Image.Image:
 # Public entry
 # ──────────────────────────────────────────────────────────────────────────────
 
-@log_call
-def draw_travel_time_screen(display, transition=False):
-    # Time-of-day guard (retain original behavior)
-    now = dt.datetime.now(CENTRAL_TIME).time()
+def is_travel_screen_active(now: Optional[dt.time] = None) -> bool:
     start, end = TRAVEL_ACTIVE_WINDOW
+    now = now or dt.datetime.now(CENTRAL_TIME).time()
 
     if start <= end:
         active = start <= now < end
@@ -251,11 +272,19 @@ def draw_travel_time_screen(display, transition=False):
 
     if not active:
         logging.debug("Travel screen skipped—outside active window.")
+
+    return active
+
+
+@log_call
+def draw_travel_time_screen(
+    display,
+    transition: bool = False,
+) -> Optional[Image.Image | ScreenImage]:
+    if not is_travel_screen_active():
         return None
 
-    # Fetch travel times (robust, never raises)
     times = get_travel_times()
-
     img = _compose_travel_image(times)
 
     if transition:
@@ -265,4 +294,11 @@ def draw_travel_time_screen(display, transition=False):
     display.image(img)
     display.show()
     time.sleep(4)
-    return None
+    return ScreenImage(img, displayed=True)
+
+
+__all__ = [
+    "draw_travel_time_screen",
+    "get_travel_times",
+    "is_travel_screen_active",
+]
