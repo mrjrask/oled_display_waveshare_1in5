@@ -41,8 +41,6 @@ from config import (
     ENABLE_VIDEO,
     VIDEO_FPS,
     ENABLE_WIFI_MONITOR,
-    TRAVEL_ACTIVE_WINDOW,
-    CENTRAL_TIME,
 )
 from utils import (
     Display,
@@ -58,7 +56,7 @@ import wifi_utils  # for wifi_utils.wifi_status
 from draw_date_time      import draw_date, draw_time
 from draw_weather        import draw_weather_screen_1, draw_weather_screen_2
 from draw_vrnof          import draw_vrnof_screen
-from draw_travel_time    import draw_travel_time_screen
+from draw_travel_time    import draw_travel_time_screen, is_travel_screen_active
 from draw_bears_schedule import show_bears_next_game
 from draw_hawks_schedule import (
     draw_last_hawks_game,
@@ -381,22 +379,6 @@ def show_nba_logo_screen() -> Optional[Image.Image]:
     return show_logo(nba_logo)
 
 
-def _is_travel_screen_active() -> bool:
-    """Return True if the travel screen should be shown right now."""
-
-    start, end = TRAVEL_ACTIVE_WINDOW
-    now = datetime.datetime.now(CENTRAL_TIME).time()
-
-    if start <= end:
-        active = start <= now < end
-    else:  # window wraps past midnight
-        active = now >= start or now < end
-
-    if not active:
-        logging.debug("Skipping travel screen—outside active window.")
-
-    return active
-
 # ─── Build screen sequence ───────────────────────────────────────────────────
 def build_screens():
     screens = [
@@ -412,7 +394,7 @@ def build_screens():
 
     travel_freq = screen_frequencies.get("travel", 1)
     travel_enabled = travel_freq > 0
-    travel_active = _is_travel_screen_active()
+    travel_active = is_travel_screen_active()
 
     if travel_enabled and travel_active:
         screens.append(("travel", lambda: draw_travel_time_screen(display, transition=True)))
