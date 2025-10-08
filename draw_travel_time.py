@@ -243,7 +243,14 @@ def draw_travel_time_screen(display, transition=False):
     # Time-of-day guard (retain original behavior)
     now = dt.datetime.now(CENTRAL_TIME).time()
     start, end = TRAVEL_ACTIVE_WINDOW
-    if not (start <= now < end):
+
+    if start <= end:
+        active = start <= now < end
+    else:
+        active = now >= start or now < end
+
+    if not active:
+        logging.debug("Travel screen skipped—outside active window.")
         return None
 
     # Fetch travel times (robust, never raises)
