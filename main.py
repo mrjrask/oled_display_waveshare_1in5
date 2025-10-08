@@ -414,12 +414,10 @@ def build_screens():
     travel_enabled = travel_freq > 0
     travel_active = _is_travel_screen_active()
 
-    if travel_enabled:
-        if not travel_active:
-            logging.info(
-                "⏰ Travel screen enabled via config; overriding inactive window."
-            )
+    if travel_enabled and travel_active:
         screens.append(("travel", lambda: draw_travel_time_screen(display, transition=True)))
+    elif travel_enabled:
+        logging.debug("Travel screen enabled but outside active window.")
     elif travel_active:
         logging.debug("Travel screen active but disabled via config.")
 
