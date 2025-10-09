@@ -68,6 +68,7 @@ _CONFERENCE_ALIASES = {
 }
 
 _DIRECTION_KEYWORDS = ("EAST", "WEST", "NORTH", "SOUTH")
+_DIVISION_PATTERN = re.compile(r"\b(AFC|NFC)\s+(EAST|WEST|NORTH|SOUTH)\b", re.IGNORECASE)
 
 DIVISION_ORDER_NFC = ["NFC North", "NFC East", "NFC South", "NFC West"]
 DIVISION_ORDER_AFC = ["AFC North", "AFC East", "AFC South", "AFC West"]
@@ -184,6 +185,51 @@ def _normalize_division(name: Any, conference: str = "") -> str:
     return " ".join(normalized).strip()
 
 
+def _extract_division_from_text(text: Any) -> str:
+    if not isinstance(text, str):
+        return ""
+    match = _DIVISION_PATTERN.search(text)
+    if not match:
+        return ""
+    conference, direction = match.groups()
+    return f"{conference.upper()} {direction.title()}"
+
+
+def _extract_groups_info(data: Any) -> tuple[str, str]:
+    conference_name = ""
+    division_name = ""
+    stack: list[Any] = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            type_value = str(node.get("type") or node.get("typeId") or "").lower()
+            label = _first_string(node, ("displayName", "name", "abbreviation", "shortName", "label"))
+            if label:
+                label = label.strip()
+                division_guess = _extract_division_from_text(label)
+                if division_guess and not division_name:
+                    division_name = division_guess
+                if "division" in type_value and not division_name:
+                    division_name = label
+                if "conference" in type_value and not conference_name:
+                    conference_name = label
+                if not conference_name:
+                    conference_guess = _normalize_conference(label)
+                    if conference_guess in {CONFERENCE_AFC_KEY, CONFERENCE_NFC_KEY}:
+                        conference_name = conference_guess
+
+            for key in ("parent", "children", "items", "leagues"):
+                value = node.get(key)
+                if isinstance(value, list):
+                    stack.extend(value)
+                elif isinstance(value, dict):
+                    stack.append(value)
+        elif isinstance(node, list):
+            stack.extend(node)
+
+    return conference_name, division_name
+
+
 def _stat_map(stats: Iterable[dict]) -> dict[str, Any]:
     mapping: dict[str, Any] = {}
     for stat in stats or []:
@@ -255,6 +301,38 @@ def _extract_team_info(entry: Any) -> Optional[Dict[str, Any]]:
             break
     if not division_name and isinstance(team.get("division"), dict):
         division_name = _first_string(team["division"], ("displayName", "name", "abbreviation"))
+
+    if not division_name or not conference_name:
+        groups_data = team.get("groups")
+        if isinstance(groups_data, (dict, list)):
+            group_conf, group_div = _extract_groups_info(groups_data)
+            if not division_name and group_div:
+                division_name = group_div
+            if not conference_name and group_conf:
+                conference_name = group_conf
+            if not conference_name and group_div:
+                conference_name = group_div
+
+    if not division_name:
+        summary = team.get("standingSummary")
+        division_guess = _extract_division_from_text(summary)
+        if not division_guess and isinstance(summary, str) and " in " in summary.lower():
+            division_guess = summary.split(" in ", 1)[1].strip()
+        if division_guess:
+            division_name = division_guess
+            if not conference_name:
+                conference_name = division_guess
+
+    if not division_name:
+        note = entry.get("note") if isinstance(entry.get("note"), dict) else None
+        if isinstance(note, dict):
+            for key in ("headline", "shortHeadline", "description", "detail"):
+                division_guess = _extract_division_from_text(note.get(key))
+                if division_guess:
+                    division_name = division_guess
+                    if not conference_name:
+                        conference_name = division_guess
+                    break
 
     return {
         "abbr": abbr,
