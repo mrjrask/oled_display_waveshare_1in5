@@ -94,6 +94,63 @@ SCROLL_PAUSE_TOP = 1.0
 SCROLL_PAUSE_BOTTOM = 1.0
 
 
+def _coerce_time(value: Any) -> Optional[dt.time]:
+    """Best-effort conversion of ``value`` into a ``datetime.time`` instance."""
+
+    if isinstance(value, dt.time):
+        return value
+
+    if isinstance(value, dt.datetime):
+        return value.timetz() if value.tzinfo else value.time()
+
+    if isinstance(value, str):
+        text = value.strip()
+        formats = ["%H:%M", "%I:%M%p", "%I:%M %p", "%H%M", "%I%p"]
+        for fmt in formats:
+            try:
+                return dt.datetime.strptime(text, fmt).time()
+            except ValueError:
+                continue
+        logging.warning("Travel screen: could not parse time string '%s'.", value)
+
+    return None
+
+
+def get_travel_active_window() -> Optional[Tuple[dt.time, dt.time]]:
+    """Return the configured travel active window as ``(start, end)`` times.
+
+    The configuration can provide native ``datetime.time`` objects or strings in
+    a handful of common formats (e.g. ``"14:30"`` or ``"2:30 PM"``). If the
+    window cannot be interpreted, ``None`` is returned which callers may treat
+    as "always active".
+    """
+
+    window = TRAVEL_ACTIVE_WINDOW
+
+    if not window:
+        return None
+
+    if not isinstance(window, (tuple, list)) or len(window) != 2:
+        logging.warning(
+            "Travel screen: invalid active window %r (expected 2-item tuple).", window
+        )
+        return None
+
+    start_raw, end_raw = window
+    start = _coerce_time(start_raw)
+    end = _coerce_time(end_raw)
+
+    if not start or not end:
+        logging.warning(
+            "Travel screen: active window contains invalid times (%r, %r).",
+            start_raw,
+            end_raw,
+        )
+        return None
+
+    return start, end
+
+
 def get_travel_times() -> Dict[str, TravelTimeResult]:
     """Return formatted travel times keyed by route identifier."""
 
@@ -384,8 +441,23 @@ def _scroll_travel_display(display, full_img: Image.Image) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def is_travel_screen_active(now: Optional[dt.time] = None) -> bool:
-    start, end = TRAVEL_ACTIVE_WINDOW
-    now = now or dt.datetime.now(CENTRAL_TIME).time()
+    window = get_travel_active_window()
+    if not window:
+        return True
+
+    start, end = window
+
+    if start == end:
+        return True
+
+    if isinstance(now, dt.datetime):
+        now = now.timetz() if now.tzinfo else now.time()
+    elif now is None:
+        now = dt.datetime.now(CENTRAL_TIME).time()
+
+    if not isinstance(now, dt.time):
+        logging.warning("Travel screen: could not interpret current time %r.", now)
+        return True
 
     if start <= end:
         active = start <= now < end
@@ -423,4 +495,5 @@ __all__ = [
     "draw_travel_time_screen",
     "get_travel_times",
     "is_travel_screen_active",
+    "get_travel_active_window",
 ]

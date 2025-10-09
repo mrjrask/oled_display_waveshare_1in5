@@ -58,7 +58,11 @@ import wifi_utils  # for wifi_utils.wifi_status
 from draw_date_time      import draw_date, draw_time
 from draw_weather        import draw_weather_screen_1, draw_weather_screen_2
 from draw_vrnof          import draw_vrnof_screen
-from draw_travel_time    import draw_travel_time_screen, is_travel_screen_active
+from draw_travel_time    import (
+    draw_travel_time_screen,
+    get_travel_active_window,
+    is_travel_screen_active,
+)
 from draw_bears_schedule import show_bears_next_game
 from draw_hawks_schedule import (
     draw_last_hawks_game,
@@ -404,30 +408,37 @@ def build_screens():
     travel_enabled = travel_freq > 0
     travel_active = is_travel_screen_active()
 
-    start, end = TRAVEL_ACTIVE_WINDOW
+    window = get_travel_active_window()
     now_time = datetime.datetime.now(CENTRAL_TIME).time()
 
-    def fmt_time(value: datetime.time) -> str:
-        return value.strftime("%I:%M %p").lstrip("0").replace(" 0", " ")
+    def fmt_time(value: Optional[datetime.time]) -> str:
+        if isinstance(value, datetime.time):
+            return value.strftime("%I:%M %p").lstrip("0").replace(" 0", " ")
+        return "all day"
+
+    window_desc = (
+        f"{fmt_time(window[0])} – {fmt_time(window[1])}" if window else "all day"
+    )
 
     if travel_enabled and travel_active:
         state = "scheduled"
         if _travel_schedule_state != state:
             logging.info(
-                "🧭 Travel screen enabled (window %s – %s).",
-                fmt_time(start),
-                fmt_time(end),
+                "🧭 Travel screen enabled (window %s).",
+                window_desc,
             )
         screens.append(("travel", lambda: draw_travel_time_screen(display, transition=True)))
     elif travel_enabled:
         state = "outside_window"
         if _travel_schedule_state != state:
-            logging.info(
-                "🧭 Travel screen skipped—outside active window (%s – %s, now %s).",
-                fmt_time(start),
-                fmt_time(end),
-                fmt_time(now_time),
-            )
+            if window:
+                logging.info(
+                    "🧭 Travel screen skipped—outside active window (%s, now %s).",
+                    window_desc,
+                    fmt_time(now_time),
+                )
+            else:
+                logging.info("🧭 Travel screen enabled (no active window configured).")
     elif travel_active:
         state = "disabled"
         if _travel_schedule_state != state:
