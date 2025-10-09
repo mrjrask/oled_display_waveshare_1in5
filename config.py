@@ -187,22 +187,34 @@ INSIDE_COL_TEXT   = (255, 255, 255)
 INSIDE_COL_STROKE = (230, 230, 230)
 
 # Travel time screen
+DEFAULT_WORK_ADDRESS = "224 W Hill St, Chicago, IL"
+DEFAULT_HOME_ADDRESS = "3912 Rutgers Ln, Northbrook, IL"
+
+TRAVEL_TO_HOME_ORIGIN = os.environ.get("TRAVEL_TO_HOME_ORIGIN", DEFAULT_WORK_ADDRESS)
+TRAVEL_TO_HOME_DESTINATION = os.environ.get(
+    "TRAVEL_TO_HOME_DESTINATION", DEFAULT_HOME_ADDRESS
+)
+TRAVEL_TO_WORK_ORIGIN = os.environ.get("TRAVEL_TO_WORK_ORIGIN", DEFAULT_HOME_ADDRESS)
+TRAVEL_TO_WORK_DESTINATION = os.environ.get(
+    "TRAVEL_TO_WORK_DESTINATION", DEFAULT_WORK_ADDRESS
+)
+
 TRAVEL_PROFILES = {
     "to_home": {
-        "origin": "224 W Hill St, Chicago, IL",
-        "destination": "3912 Rutgers Ln, Northbrook, IL",
+        "origin": TRAVEL_TO_HOME_ORIGIN,
+        "destination": TRAVEL_TO_HOME_DESTINATION,
         "title": "Travel Time to Home…",
         "active_window": (datetime.time(14, 30), datetime.time(19, 0)),
     },
     "to_work": {
-        "origin": "3912 Rutgers Ln, Northbrook, IL",
-        "destination": "224 W Hill St, Chicago, IL",
+        "origin": TRAVEL_TO_WORK_ORIGIN,
+        "destination": TRAVEL_TO_WORK_DESTINATION,
         "title": "Travel Time to Work…",
         "active_window": (datetime.time(6, 0), datetime.time(11, 0)),
     },
     "default": {
-        "origin": "224 W Hill St, Chicago, IL",
-        "destination": "3912 Rutgers Ln, Northbrook, IL",
+        "origin": TRAVEL_TO_HOME_ORIGIN,
+        "destination": TRAVEL_TO_HOME_DESTINATION,
         "title": "Travel Time…",
         "active_window": (datetime.time(6, 0), datetime.time(19, 0)),
     },
