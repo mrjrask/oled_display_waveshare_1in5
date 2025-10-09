@@ -92,6 +92,10 @@ from mlb_standings       import (
 from mlb_scoreboard      import draw_mlb_scoreboard
 from nba_scoreboard      import draw_nba_scoreboard
 from nhl_scoreboard      import draw_nhl_scoreboard
+from nhl_standings       import (
+    draw_nhl_standings_east,
+    draw_nhl_standings_west,
+)
 from nfl_scoreboard      import draw_nfl_scoreboard
 from draw_inside import draw_inside
 
@@ -465,6 +469,14 @@ def build_screens():
             ),
             ("nhl logo",   (lambda: show_logo(nhl_logo)) if nhl_logo else None),
             ("NHL Scoreboard", lambda: draw_nhl_scoreboard(display, transition=True)),
+            (
+                "NHL Standings West",
+                lambda: draw_nhl_standings_west(display, transition=True),
+            ),
+            (
+                "NHL Standings East",
+                lambda: draw_nhl_standings_east(display, transition=True),
+            ),
         ]
         screens = [s for s in screens if s]
 
