@@ -21,11 +21,14 @@ from http_client import NHL_HEADERS, get_session
 from utils import ScreenImage, clear_display, clone_font, log_call
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-TITLE_WEST = "NHL Standings — West"
-TITLE_EAST = "NHL Standings — East"
+TITLE_WEST = "Western Conference"
+TITLE_EAST = "Eastern Conference"
 STANDINGS_URL = "https://statsapi.web.nhl.com/api/v1/standings"
 REQUEST_TIMEOUT = 10
 CACHE_TTL = 15 * 60  # seconds
+
+CONFERENCE_WEST_KEY = "Western"
+CONFERENCE_EAST_KEY = "Eastern"
 
 LOGO_DIR = os.path.join(IMAGES_DIR, "nhl")
 LOGO_HEIGHT = 20
@@ -141,6 +144,35 @@ def _normalize_int(value) -> int:
         return 0
 
 
+def _normalize_conference_name(name: object) -> str:
+    if not isinstance(name, str):
+        return ""
+    text = name.strip()
+    if not text:
+        return ""
+    if text.lower().endswith("conference"):
+        text = text[: -len("conference")].strip()
+    lowered = text.lower()
+    if lowered == "western":
+        return CONFERENCE_WEST_KEY
+    if lowered == "eastern":
+        return CONFERENCE_EAST_KEY
+    return text.title()
+
+
+def _normalize_division_name(name: object) -> str:
+    if not isinstance(name, str):
+        return ""
+    text = name.strip()
+    if not text:
+        return ""
+    if text.lower().endswith("division"):
+        text = text[: -len("division")].strip()
+    if not text:
+        return ""
+    return text.title()
+
+
 def _division_section_height(team_count: int) -> int:
     height = DIVISION_MARGIN_TOP + DIVISION_TEXT_HEIGHT
     height += COLUMN_ROW_HEIGHT + COLUMN_GAP_BELOW
@@ -150,7 +182,7 @@ def _division_section_height(team_count: int) -> int:
     return height
 
 
-def _fetch_standings_data() -> dict[str, list[dict]]:
+def _fetch_standings_data() -> dict[str, dict[str, list[dict]]]:
     now = time.time()
     cached = _STANDINGS_CACHE.get("data")
     timestamp = float(_STANDINGS_CACHE.get("timestamp", 0.0))
@@ -166,13 +198,15 @@ def _fetch_standings_data() -> dict[str, list[dict]]:
         return cached or {}
 
     records = payload.get("records", []) if isinstance(payload, dict) else []
-    divisions: dict[str, list[dict]] = {}
+    conferences: dict[str, dict[str, list[dict]]] = {}
     for record in records:
         if not isinstance(record, dict):
             continue
         div = record.get("division", {}) or {}
-        div_name = (div.get("name") or "").strip()
-        if not div_name:
+        conf = record.get("conference", {}) or {}
+        conf_name = _normalize_conference_name(conf.get("name"))
+        div_name = _normalize_division_name(div.get("name"))
+        if not conf_name or not div_name:
             continue
         teams = record.get("teamRecords", []) or []
         parsed: list[dict] = []
@@ -192,13 +226,13 @@ def _fetch_standings_data() -> dict[str, list[dict]]:
                 }
             )
         if parsed:
-            divisions[div_name] = parsed
+            conferences.setdefault(conf_name, {})[div_name] = parsed
 
-    if divisions:
+    if conferences:
         _STANDINGS_CACHE["timestamp"] = now
-        _STANDINGS_CACHE["data"] = divisions
+        _STANDINGS_CACHE["data"] = conferences
 
-    return divisions
+    return conferences
 
 
 def _draw_centered_text(draw: ImageDraw.ImageDraw, text: str, font, top: int) -> int:
@@ -302,8 +336,9 @@ def _scroll_vertical(display, image: Image.Image) -> None:
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
 def draw_nhl_standings_west(display, transition: bool = False) -> ScreenImage:
-    standings = _fetch_standings_data()
-    divisions = [d for d in DIVISION_ORDER_WEST if standings.get(d)]
+    standings_by_conf = _fetch_standings_data()
+    conference = standings_by_conf.get(CONFERENCE_WEST_KEY, {})
+    divisions = [d for d in DIVISION_ORDER_WEST if conference.get(d)]
     if not divisions:
         clear_display(display)
         img = _render_empty(TITLE_WEST)
@@ -312,7 +347,7 @@ def draw_nhl_standings_west(display, transition: bool = False) -> ScreenImage:
         display.image(img)
         return ScreenImage(img, displayed=True)
 
-    full_img = _render_conference(TITLE_WEST, divisions, standings)
+    full_img = _render_conference(TITLE_WEST, divisions, conference)
     clear_display(display)
     _scroll_vertical(display, full_img)
     return ScreenImage(full_img, displayed=True)
@@ -320,8 +355,9 @@ def draw_nhl_standings_west(display, transition: bool = False) -> ScreenImage:
 
 @log_call
 def draw_nhl_standings_east(display, transition: bool = False) -> ScreenImage:
-    standings = _fetch_standings_data()
-    divisions = [d for d in DIVISION_ORDER_EAST if standings.get(d)]
+    standings_by_conf = _fetch_standings_data()
+    conference = standings_by_conf.get(CONFERENCE_EAST_KEY, {})
+    divisions = [d for d in DIVISION_ORDER_EAST if conference.get(d)]
     if not divisions:
         clear_display(display)
         img = _render_empty(TITLE_EAST)
@@ -330,7 +366,7 @@ def draw_nhl_standings_east(display, transition: bool = False) -> ScreenImage:
         display.image(img)
         return ScreenImage(img, displayed=True)
 
-    full_img = _render_conference(TITLE_EAST, divisions, standings)
+    full_img = _render_conference(TITLE_EAST, divisions, conference)
     clear_display(display)
     _scroll_vertical(display, full_img)
     return ScreenImage(full_img, displayed=True)
