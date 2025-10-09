@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import time
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional
 
 from PIL import Image, ImageDraw
 
@@ -24,6 +26,8 @@ from utils import ScreenImage, clear_display, clone_font, log_call
 TITLE_WEST = "Western Conference"
 TITLE_EAST = "Eastern Conference"
 STANDINGS_URL = "https://statsapi.web.nhl.com/api/v1/standings"
+API_WEB_STANDINGS_URL = "https://api-web.nhle.com/v1/standings/now"
+API_WEB_STANDINGS_PARAMS = {"site": "en_nhl"}
 REQUEST_TIMEOUT = 10
 CACHE_TTL = 15 * 60  # seconds
 
@@ -60,6 +64,10 @@ _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
+
+STATSAPI_HOST = "statsapi.web.nhl.com"
+_DNS_RETRY_INTERVAL = 600  # seconds
+_dns_block_until = 0.0
 
 DIVISION_ORDER_WEST = ["Central", "Pacific"]
 DIVISION_ORDER_EAST = ["Metropolitan", "Atlantic"]
@@ -189,13 +197,54 @@ def _fetch_standings_data() -> dict[str, dict[str, list[dict]]]:
     if cached and now - timestamp < CACHE_TTL:
         return cached  # type: ignore[return-value]
 
+    standings: Optional[dict[str, dict[str, list[dict]]]] = None
+
+    if _statsapi_available():
+        standings = _fetch_standings_statsapi()
+    else:
+        logging.info("Using api-web NHL standings endpoint (statsapi DNS failure)")
+
+    if not standings:
+        standings = _fetch_standings_api_web()
+
+    if standings:
+        _STANDINGS_CACHE["timestamp"] = now
+        _STANDINGS_CACHE["data"] = standings
+        return standings
+
+    return cached or {}
+
+
+def _statsapi_available() -> bool:
+    global _dns_block_until
+
+    now = time.time()
+    if now < _dns_block_until:
+        return False
+
+    try:
+        socket.getaddrinfo(STATSAPI_HOST, None)
+    except socket.gaierror as exc:
+        logging.warning("NHL statsapi DNS lookup failed: %s", exc)
+        _dns_block_until = now + _DNS_RETRY_INTERVAL
+        return False
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logging.debug("Unexpected error checking NHL statsapi DNS: %s", exc)
+    else:
+        _dns_block_until = 0.0
+        return True
+
+    return True
+
+
+def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
     try:
         response = _SESSION.get(STANDINGS_URL, timeout=REQUEST_TIMEOUT, headers=NHL_HEADERS)
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:
         logging.error("Failed to fetch NHL standings: %s", exc)
-        return cached or {}
+        return None
 
     records = payload.get("records", []) if isinstance(payload, dict) else []
     conferences: dict[str, dict[str, list[dict]]] = {}
@@ -228,9 +277,194 @@ def _fetch_standings_data() -> dict[str, dict[str, list[dict]]]:
         if parsed:
             conferences.setdefault(conf_name, {})[div_name] = parsed
 
-    if conferences:
-        _STANDINGS_CACHE["timestamp"] = now
-        _STANDINGS_CACHE["data"] = conferences
+    return conferences if conferences else None
+
+
+def _coerce_text(value: Any) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            return text
+        return ""
+    if isinstance(value, dict):
+        for key in ("default", "en", "english", "abbr", "abbrev", "code", "name", "value"):
+            inner = value.get(key)
+            if isinstance(inner, str) and inner.strip():
+                return inner.strip()
+    return ""
+
+
+def _extract_from_candidates(payload: dict, keys: Iterable[str]) -> str:
+    for key in keys:
+        if not isinstance(payload, dict):
+            continue
+        text = _coerce_text(payload.get(key))
+        if text:
+            return text
+    return ""
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    if isinstance(value, (int, float)):
+        try:
+            return int(value)
+        except Exception:
+            return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return int(float(text))
+        except ValueError:
+            return None
+    if isinstance(value, dict):
+        for key in ("value", "default", "amount", "num", "number", "statValue"):
+            nested = value.get(key)
+            result = _coerce_int(nested)
+            if result is not None:
+                return result
+    return None
+
+
+def _extract_stat(row: dict, names: Iterable[str]) -> int:
+    name_candidates = [name.lower() for name in names]
+    for key in names:
+        value = row.get(key)
+        result = _coerce_int(value)
+        if result is not None:
+            return result
+
+    stats_iterables = [
+        row.get("stats"),
+        row.get("teamStats"),
+        row.get("teamStatsLeaders"),
+        row.get("splits"),
+    ]
+    for stats in stats_iterables:
+        if not isinstance(stats, Iterable) or isinstance(stats, (str, bytes)):
+            continue
+        for stat in stats:
+            if not isinstance(stat, dict):
+                continue
+            identifier = _coerce_text(stat.get("name")) or _coerce_text(stat.get("type"))
+            abbreviation = _coerce_text(stat.get("abbr") or stat.get("abbreviation"))
+            identifier = identifier.lower() if identifier else ""
+            abbreviation = abbreviation.lower() if abbreviation else ""
+            for candidate in name_candidates:
+                if identifier == candidate or abbreviation == candidate:
+                    result = _coerce_int(stat.get("value") or stat.get("statValue") or stat.get("amount"))
+                    if result is not None:
+                        return result
+    return 0
+
+
+def _extract_rank(row: dict) -> int:
+    for key in (
+        "divisionRank",
+        "conferenceRank",
+        "leagueRank",
+        "rank",
+        "sequence",
+        "position",
+        "order",
+    ):
+        value = _coerce_int(row.get(key))
+        if value is not None and value > 0:
+            return value
+    return 99
+
+
+def _fetch_standings_api_web() -> Optional[dict[str, dict[str, list[dict]]]]:
+    try:
+        response = _SESSION.get(
+            API_WEB_STANDINGS_URL,
+            timeout=REQUEST_TIMEOUT,
+            headers=NHL_HEADERS,
+            params=API_WEB_STANDINGS_PARAMS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        logging.error("Failed to fetch NHL standings (api-web fallback): %s", exc)
+        return None
+
+    standings_payload = []
+    if isinstance(payload, dict):
+        for key in ("standings", "records", "groups"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                standings_payload = value
+                break
+        else:
+            if isinstance(payload.get("rows"), list):
+                standings_payload = [payload]
+
+    conferences: dict[str, dict[str, list[dict]]] = {}
+
+    for group in standings_payload:
+        if not isinstance(group, dict):
+            continue
+        rows = None
+        for key in ("teamRecords", "rows", "standings", "standingsRows", "teams"):
+            candidate = group.get(key)
+            if isinstance(candidate, list):
+                rows = candidate
+                break
+        if rows is None:
+            continue
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            team_info = row.get("team") if isinstance(row.get("team"), dict) else {}
+            conference_name = (
+                _extract_from_candidates(row, ("conferenceName", "conference", "conferenceAbbrev", "conferenceId"))
+                or _extract_from_candidates(team_info, ("conferenceName", "conference"))
+            )
+            division_name = (
+                _extract_from_candidates(row, ("divisionName", "division", "divisionAbbrev", "divisionId"))
+                or _extract_from_candidates(team_info, ("divisionName", "division"))
+            )
+            conference_name = _normalize_conference_name(conference_name)
+            division_name = _normalize_division_name(division_name)
+            if not conference_name or not division_name:
+                continue
+
+            abbr = (
+                _extract_from_candidates(row, ("teamAbbrev", "abbrev", "triCode", "teamTricode"))
+                or _extract_from_candidates(team_info, ("abbrev", "triCode", "teamTricode"))
+                or _team_abbreviation(team_info)
+            )
+
+            if not abbr:
+                continue
+
+            wins = _extract_stat(row, ("wins", "w"))
+            losses = _extract_stat(row, ("losses", "l"))
+            ot = _extract_stat(row, ("ot", "otLosses", "otl"))
+            points = _extract_stat(row, ("points", "pts"))
+
+            team_entry = {
+                "abbr": abbr,
+                "wins": wins,
+                "losses": losses,
+                "ot": ot,
+                "points": points,
+                "_rank": _extract_rank(row),
+            }
+
+            divisions = conferences.setdefault(conference_name, {})
+            divisions.setdefault(division_name, []).append(team_entry)
+
+    if not conferences:
+        return None
+
+    for conference in conferences.values():
+        for teams in conference.values():
+            teams.sort(key=lambda item: (item.get("_rank", 99), item.get("abbr", "")))
+            for item in teams:
+                item.pop("_rank", None)
 
     return conferences
 
