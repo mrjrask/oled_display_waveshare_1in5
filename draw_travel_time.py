@@ -8,19 +8,19 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
 
 from config import (
     CENTRAL_TIME,
-    FONT_SCORE,
     FONT_TITLE_SPORTS,
     FONT_TRAVEL_HEADER,
     FONT_TRAVEL_TITLE,
     FONT_TRAVEL_VALUE,
     GOOGLE_MAPS_API_KEY,
     HEIGHT,
+    IMAGES_DIR,
     TRAVEL_ACTIVE_WINDOW,
     TRAVEL_DESTINATION,
     TRAVEL_DIRECTIONS_URL,
@@ -58,21 +58,16 @@ def _fetch_routes(avoid_highways: bool = False) -> List[Dict[str, Any]]:
     )
 
 
-def _pick_non_highway() -> Optional[dict]:
-    routes = _fetch_routes(avoid_highways=True)
-    return fastest_route(routes)
+def _pop_route(pool: List[dict], tokens: Sequence[str]) -> Optional[dict]:
+    match = choose_route_by_any(pool, list(tokens))
+    if match:
+        pool.remove(match)
+        return match
 
-
-def _pick_interstate(routes: Iterable[dict], i_label: str, synonyms: Iterable[str]) -> Optional[dict]:
-    tokens = [
-        i_label,
-        i_label.replace("-", " "),
-        i_label.replace("-", ""),
-        *synonyms,
-    ]
-    routes_list = list(routes)
-    match = choose_route_by_any(routes_list, tokens)
-    return match or fastest_route(routes_list)
+    fallback = fastest_route(pool)
+    if fallback and fallback in pool:
+        pool.remove(fallback)
+    return fallback
 
 @dataclass
 class TravelTimeResult:
@@ -155,99 +150,104 @@ def get_travel_times() -> Dict[str, TravelTimeResult]:
     """Return formatted travel times keyed by route identifier."""
 
     try:
-        base = _fetch_routes(avoid_highways=False)
-        non_highway = _pick_non_highway()
+        routes_all = list(_fetch_routes(avoid_highways=False))
+        remaining = list(routes_all)
 
-        r_i94 = _pick_interstate(base, "I-94", ["I94", "Edens", "Dan Ryan"])
-        r_i90 = _pick_interstate(base, "I-90", ["I90", "Kennedy"])
+        lake_shore_tokens = [
+            "lake shore",
+            "lake shore dr",
+            "lake shore drive",
+            "us-41",
+            "us 41",
+            "lsd",
+            "sheridan",
+            "sheridan rd",
+            "sheridan road",
+            "dundee",
+            "dundee rd",
+            "dundee road",
+        ]
+        kennedy_edens_tokens = [
+            "edens",
+            "edens expressway",
+            "i-94",
+            "i 94",
+            "i94",
+            "90/94",
+            "kennedy",
+            "dan ryan",
+        ]
+        kennedy_294_tokens = [
+            "i-294",
+            "i 294",
+            "i294",
+            "294",
+            "294 tollway",
+            "tri-state",
+            "willow",
+            "willow rd",
+            "willow road",
+        ]
+
+        lake_shore = _pop_route(remaining, lake_shore_tokens)
+        kennedy_edens = _pop_route(remaining, kennedy_edens_tokens)
+        kennedy_294 = _pop_route(remaining, kennedy_294_tokens)
 
         return {
-            "i94": TravelTimeResult.from_route(r_i94),
-            "i90": TravelTimeResult.from_route(r_i90),
-            "non_hw": TravelTimeResult.from_route(non_highway),
+            "lake_shore": TravelTimeResult.from_route(lake_shore),
+            "kennedy_edens": TravelTimeResult.from_route(kennedy_edens),
+            "kennedy_294": TravelTimeResult.from_route(kennedy_294),
         }
     except Exception as exc:  # pragma: no cover - defensive guard for runtime issues
         logging.warning("Travel time parse failed: %s", exc)
         return {
-            "i94": TravelTimeResult("N/A"),
-            "i90": TravelTimeResult("N/A"),
-            "non_hw": TravelTimeResult("N/A"),
+            "lake_shore": TravelTimeResult("N/A"),
+            "kennedy_edens": TravelTimeResult("N/A"),
+            "kennedy_294": TravelTimeResult("N/A"),
         }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Drawing: interstate shields and green road sign
+# Drawing helpers for travel route icons
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _draw_interstate_shield(number: str, height: int = 36) -> Image.Image:
-    """Return an approximation of an interstate shield for the given number."""
-
-    width = int(height * 0.9)
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    radius = max(6, height // 6)
-    draw.rounded_rectangle(
-        (0, 0, width - 1, height - 1),
-        radius=radius,
-        fill=(255, 255, 255),
-        outline=(255, 255, 255),
-        width=2,
-    )
-    inset = 3
-    draw.rounded_rectangle(
-        (inset, inset, width - 1 - inset, height - 1 - inset),
-        radius=radius - 2,
-        fill=(0, 65, 155),
-    )
-
-    banner_height = max(int(height * 0.28), 12)
-    draw.rectangle(
-        (inset, inset, width - 1 - inset, inset + banner_height),
-        fill=(200, 30, 35),
-    )
-
+def _load_icon(path: str, height: int = 28) -> Image.Image:
     try:
-        text_width, text_height = draw.textsize("INTERSTATE", font=FONT_TRAVEL_HEADER)
-        if text_width < (width - 2 * inset):
-            draw.text(
-                ((width - text_width) // 2, inset + (banner_height - text_height) // 2),
-                "INTERSTATE",
-                font=FONT_TRAVEL_HEADER,
-                fill=(255, 255, 255),
-            )
-    except Exception:  # pragma: no cover - defensive
-        pass
+        img = Image.open(path).convert("RGBA")
+    except Exception:
+        logging.warning("Travel screen: could not load image %s", path)
+        return Image.new("RGBA", (height, height), (0, 0, 0, 0))
 
-    number_text = str(number)
-    num_width, num_height = draw.textsize(number_text, font=FONT_SCORE)
-    y_text = inset + banner_height + ((height - inset - banner_height) - num_height) // 2
-    draw.text(
-        ((width - num_width) // 2, y_text),
-        number_text,
-        font=FONT_SCORE,
-        fill=(255, 255, 255),
-    )
+    if img.height != height and img.height > 0:
+        ratio = height / float(img.height)
+        width = max(1, int(img.width * ratio))
+        img = img.resize((width, height), Image.LANCZOS)
+
     return img
 
-def _draw_green_sign(text: str, height: int = 36) -> Image.Image:
-    width = int(height * 1.5)
-    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle(
-        (0, 0, width - 1, height - 1),
-        radius=8,
-        fill=(16, 100, 16),
-        outline=(255, 255, 255),
-        width=2,
-    )
-    text_width, text_height = draw.textsize(text, font=FONT_TRAVEL_HEADER)
-    draw.text(
-        ((width - text_width) // 2, (height - text_height) // 2),
-        text,
-        font=FONT_TRAVEL_HEADER,
-        fill=(255, 255, 255),
-    )
-    return img
+
+def _compose_icons(paths: Sequence[str], height: int = 28, gap: int = 2) -> Image.Image:
+    icons = [_load_icon(path, height=height) for path in paths]
+    valid_icons = [icon for icon in icons if icon.width > 0 and icon.height > 0]
+
+    if not valid_icons:
+        return Image.new("RGBA", (height, height), (0, 0, 0, 0))
+
+    width = sum(icon.width for icon in valid_icons) + gap * (len(valid_icons) - 1)
+    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+
+    x = 0
+    for icon in valid_icons:
+        canvas.paste(icon, (x, 0), icon)
+        x += icon.width + gap
+
+    return canvas
+
+
+TRAVEL_ICON_LSD = os.path.join(IMAGES_DIR, "travel", "lsd.png")
+TRAVEL_ICON_90 = os.path.join(IMAGES_DIR, "travel", "90.png")
+TRAVEL_ICON_94 = os.path.join(IMAGES_DIR, "travel", "94.png")
+TRAVEL_ICON_294 = os.path.join(IMAGES_DIR, "travel", "294.png")
+ROUTE_ICON_HEIGHT = 24
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Composition
@@ -268,22 +268,22 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
         Tuple[str, str, Callable[[], Image.Image], Tuple[int, int, int]]
     ] = [
         (
-            "i94",
-            "I-94",
-            lambda: _draw_interstate_shield("94", height=28),
-            (90, 160, 255),
+            "lake_shore",
+            "Lake Shore → Sheridan → Dundee",
+            lambda: _compose_icons([TRAVEL_ICON_LSD], height=ROUTE_ICON_HEIGHT),
+            (120, 200, 255),
         ),
         (
-            "i90",
-            "I-90",
-            lambda: _draw_interstate_shield("90", height=28),
+            "kennedy_edens",
+            "Kennedy → Edens → Dundee",
+            lambda: _compose_icons([TRAVEL_ICON_90, TRAVEL_ICON_94], height=ROUTE_ICON_HEIGHT),
             (200, 170, 255),
         ),
         (
-            "non_hw",
-            "NON-HWY",
-            lambda: _draw_green_sign("NON-HWY", height=28),
-            (160, 255, 160),
+            "kennedy_294",
+            "Kennedy → 294 → Willow",
+            lambda: _compose_icons([TRAVEL_ICON_90, TRAVEL_ICON_294], height=ROUTE_ICON_HEIGHT),
+            (255, 200, 160),
         ),
     ]
 

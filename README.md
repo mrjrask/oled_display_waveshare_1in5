@@ -134,6 +134,8 @@ scripts:
 - `OWM_API_KEY_VERANO`, `OWM_API_KEY_WIFFY`, or `OWM_API_KEY_DEFAULT` (fallback); the code also accepts a generic
   `OWM_API_KEY` value if you only have a single OpenWeatherMap key.
 - `GOOGLE_MAPS_API_KEY` for travel-time requests (leave unset to disable that screen).
+- `TRAVEL_TO_HOME_ORIGIN`, `TRAVEL_TO_HOME_DESTINATION`, `TRAVEL_TO_WORK_ORIGIN`,
+  and `TRAVEL_TO_WORK_DESTINATION` to override the default travel addresses.
 
 You can export the variables in your shell session:
 
