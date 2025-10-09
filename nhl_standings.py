@@ -81,7 +81,7 @@ COLUMN_LAYOUT = {
     "points": 122,
 }
 COLUMN_HEADERS = [
-    ("Team", "team", "left"),
+    ("", "team", "left"),
     ("W", "wins", "right"),
     ("L", "losses", "right"),
     ("OT", "ot", "right"),
@@ -151,6 +151,16 @@ def _normalize_int(value) -> int:
         return int(value)
     except Exception:
         return 0
+
+
+def _division_sort_key(team: dict) -> tuple[int, int, int, int, str]:
+    points = _normalize_int(team.get("points"))
+    wins = _normalize_int(team.get("wins"))
+    ot = _normalize_int(team.get("ot"))
+    rank = _normalize_int(team.get("_rank", 99)) or 99
+    abbr = str(team.get("abbr", ""))
+    # Sort by points (desc), wins (desc), overtime losses (asc), then fallback rank and abbr.
+    return (-points, -wins, ot, rank, abbr)
 
 
 def _normalize_conference_name(name: object) -> str:
@@ -561,7 +571,7 @@ def _fetch_standings_api_web() -> Optional[dict[str, dict[str, list[dict]]]]:
 
     for conference in conferences.values():
         for teams in conference.values():
-            teams.sort(key=lambda item: (item.get("_rank", 99), item.get("abbr", "")))
+            teams.sort(key=_division_sort_key)
             for item in teams:
                 item.pop("_rank", None)
 
