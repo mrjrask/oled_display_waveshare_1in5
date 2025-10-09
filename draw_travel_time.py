@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import math
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -73,14 +75,46 @@ def _pop_route(pool: List[dict], tokens: Sequence[str]) -> Optional[dict]:
 class TravelTimeResult:
     """Container for travel time results."""
 
-    value: str
+    raw_text: str
+    seconds: Optional[int] = None
 
     @classmethod
     def from_route(cls, route: Optional[dict]) -> "TravelTimeResult":
-        return cls(format_duration_text(route))
+        if not route:
+            return cls("N/A")
+
+        seconds_raw = route.get("_duration_sec")
+        seconds: Optional[int]
+        if isinstance(seconds_raw, (int, float)):
+            seconds = int(seconds_raw)
+        else:
+            seconds = None
+
+        return cls(format_duration_text(route), seconds)
 
     def normalized(self) -> str:
-        return (self.value or "N/A").replace("mins", "min")
+        text = (self.raw_text or "").strip()
+
+        if self.seconds is not None:
+            minutes = max(1, math.ceil(self.seconds / 60))
+            return f"{minutes} min"
+
+        hours_match = re.search(r"(\d+)\s*hour", text)
+        minutes_match = re.search(r"(\d+)\s*min", text)
+
+        total_minutes = 0
+        if hours_match:
+            total_minutes += int(hours_match.group(1)) * 60
+        if minutes_match:
+            total_minutes += int(minutes_match.group(1))
+
+        if total_minutes:
+            return f"{total_minutes} min"
+
+        if text:
+            return text.replace("mins", "min")
+
+        return "N/A"
 
 
 SCROLL_STEP = 2
