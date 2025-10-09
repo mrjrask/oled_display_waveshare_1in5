@@ -356,23 +356,97 @@ def _collect_division_groups(data: Any) -> List[Tuple[str, str, List[dict]]]:
             if node_id in seen_nodes:
                 continue
             seen_nodes.add(node_id)
+
             standings = node.get("standings")
             if isinstance(standings, dict):
+                node_label = _first_string(node, ("displayName", "name", "abbreviation", "label"))
+                standings_label = _first_string(
+                    standings, ("displayName", "name", "abbreviation", "label")
+                )
+                base_label = node_label or standings_label
+                base_conf_hint = _normalize_conference(base_label) or _normalize_conference(
+                    standings_label
+                )
+
                 entries = standings.get("entries")
                 if isinstance(entries, list) and entries:
-                    label = _first_string(node, ("displayName", "name", "abbreviation", "label"))
-                    if not label:
-                        label = _first_string(standings, ("displayName", "name", "abbreviation", "label"))
+                    label = base_label or ""
                     if label:
                         upper = label.upper()
                         if any(direction in upper for direction in _DIRECTION_KEYWORDS):
-                            conference_hint = _normalize_conference(label)
-                            if not conference_hint:
-                                conference_hint = _normalize_conference(
-                                    _first_string(standings, ("displayName", "name"))
-                                )
+                            conference_hint = base_conf_hint or _normalize_conference(label)
                             groups.append((conference_hint, label, entries))
+
+                entries_by_group = standings.get("entriesByGroup")
+                if isinstance(entries_by_group, list):
+                    for group in entries_by_group:
+                        if not isinstance(group, dict):
+                            continue
+                        group_entries = group.get("entries")
+                        if not isinstance(group_entries, list) or not group_entries:
+                            continue
+
+                        group_label = _first_string(
+                            group, ("displayName", "name", "abbreviation", "label")
+                        )
+                        group_info = group.get("group")
+                        if isinstance(group_info, dict):
+                            if not group_label:
+                                group_label = _first_string(
+                                    group_info,
+                                    (
+                                        "displayName",
+                                        "name",
+                                        "abbreviation",
+                                        "shortName",
+                                        "label",
+                                    ),
+                                )
+                            parent_info = group_info.get("parent")
+                        else:
+                            parent_info = None
+
+                        if not group_label:
+                            group_label = base_label or ""
+
+                        conference_hint = _normalize_conference(
+                            _first_string(group, ("conference", "conferenceName"))
+                        )
+                        if not conference_hint and isinstance(group_info, dict):
+                            conference_hint = _normalize_conference(
+                                _first_string(
+                                    group_info,
+                                    (
+                                        "conference",
+                                        "conferenceName",
+                                        "parentConference",
+                                        "parentDisplayName",
+                                        "parentName",
+                                    ),
+                                )
+                            )
+                        if not conference_hint and isinstance(parent_info, dict):
+                            conference_hint = _normalize_conference(
+                                _first_string(
+                                    parent_info,
+                                    (
+                                        "displayName",
+                                        "name",
+                                        "abbreviation",
+                                        "shortName",
+                                        "label",
+                                    ),
+                                )
+                            )
+                        if not conference_hint:
+                            conference_hint = _normalize_conference(group_label)
+                        if not conference_hint:
+                            conference_hint = base_conf_hint
+
+                        groups.append((conference_hint or "", group_label or "", group_entries))
+
                 stack.extend(value for value in standings.values() if isinstance(value, (dict, list)))
+
             stack.extend(value for value in node.values() if isinstance(value, (dict, list)))
         elif isinstance(node, list):
             stack.extend(item for item in node if isinstance(item, (dict, list)))
@@ -382,8 +456,16 @@ def _collect_division_groups(data: Any) -> List[Tuple[str, str, List[dict]]]:
 def _extract_entries(payload: Any) -> List[dict]:
     """Return the first set of overall standings entries found in *payload*."""
 
-    if isinstance(payload, dict) and isinstance(payload.get("entries"), list):
-        return payload["entries"]  # type: ignore[return-value]
+    if isinstance(payload, dict):
+        entries = payload.get("entries")
+        if isinstance(entries, list):
+            return entries  # type: ignore[return-value]
+
+        grouped_entries = payload.get("entriesByGroup")
+        if isinstance(grouped_entries, list):
+            for group in grouped_entries:
+                if isinstance(group, dict) and isinstance(group.get("entries"), list):
+                    return group["entries"]  # type: ignore[return-value]
 
     stack: List[Any] = [payload]
     candidates: List[tuple[str, List[dict]]] = []
