@@ -71,6 +71,7 @@ _dns_block_until = 0.0
 
 DIVISION_ORDER_WEST = ["Central", "Pacific"]
 DIVISION_ORDER_EAST = ["Metropolitan", "Atlantic"]
+VALID_DIVISIONS = set(DIVISION_ORDER_WEST + DIVISION_ORDER_EAST)
 
 COLUMN_LAYOUT = {
     "team": LEFT_MARGIN + LOGO_HEIGHT + 4,
@@ -190,6 +191,19 @@ def _division_section_height(team_count: int) -> int:
     return height
 
 
+def _walk_nodes(payload: object) -> Iterable[dict]:
+    """Yield every mapping from *payload* using an iterative DFS."""
+
+    stack: list[object] = [payload]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            yield current
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+
+
 def _fetch_standings_data() -> dict[str, dict[str, list[dict]]]:
     now = time.time()
     cached = _STANDINGS_CACHE.get("data")
@@ -278,6 +292,127 @@ def _fetch_standings_statsapi() -> Optional[dict[str, dict[str, list[dict]]]]:
             conferences.setdefault(conf_name, {})[div_name] = parsed
 
     return conferences if conferences else None
+
+
+def _parse_grouped_standings(groups: Iterable[dict]) -> dict[str, dict[str, list[dict]]]:
+    conferences: dict[str, dict[str, list[dict]]] = {}
+
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        rows = None
+        for key in ("teamRecords", "rows", "standings", "standingsRows", "teams"):
+            candidate = group.get(key)
+            if isinstance(candidate, list):
+                rows = candidate
+                break
+        if rows is None:
+            continue
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            team_info = row.get("team") if isinstance(row.get("team"), dict) else {}
+            conference_name = (
+                _extract_from_candidates(row, ("conferenceName", "conference", "conferenceAbbrev", "conferenceId"))
+                or _extract_from_candidates(team_info, ("conferenceName", "conference"))
+            )
+            division_name = (
+                _extract_from_candidates(row, ("divisionName", "division", "divisionAbbrev", "divisionId"))
+                or _extract_from_candidates(team_info, ("divisionName", "division"))
+            )
+            conference_name = _normalize_conference_name(conference_name)
+            division_name = _normalize_division_name(division_name)
+            if not conference_name or not division_name or division_name not in VALID_DIVISIONS:
+                continue
+
+            abbr = (
+                _extract_from_candidates(row, ("teamAbbrev", "abbrev", "triCode", "teamTricode"))
+                or _extract_from_candidates(team_info, ("abbrev", "triCode", "teamTricode"))
+                or _team_abbreviation(team_info)
+            )
+
+            if not abbr:
+                continue
+
+            wins = _extract_stat(row, ("wins", "w"))
+            losses = _extract_stat(row, ("losses", "l"))
+            ot = _extract_stat(row, ("ot", "otLosses", "otl"))
+            points = _extract_stat(row, ("points", "pts"))
+
+            team_entry = {
+                "abbr": abbr,
+                "wins": wins,
+                "losses": losses,
+                "ot": ot,
+                "points": points,
+                "_rank": _extract_rank(row),
+            }
+
+            divisions = conferences.setdefault(conference_name, {})
+            divisions.setdefault(division_name, []).append(team_entry)
+
+    return conferences
+
+
+def _parse_generic_standings(payload: object) -> dict[str, dict[str, list[dict]]]:
+    conferences: dict[str, dict[str, list[dict]]] = {}
+    seen: set[tuple[str, str, str]] = set()
+
+    for node in _walk_nodes(payload):
+        team_info = {}
+        for key in ("team", "teamRecord", "club", "clubInfo", "teamData"):
+            candidate = node.get(key)
+            if isinstance(candidate, dict):
+                team_info = candidate
+                break
+        if not team_info and isinstance(node.get("teams"), dict):
+            team_info = node.get("teams", {})  # type: ignore[assignment]
+
+        conference_name = (
+            _extract_from_candidates(node, ("conferenceName", "conference", "conferenceAbbrev", "conferenceId"))
+            or _extract_from_candidates(team_info, ("conferenceName", "conference"))
+        )
+        division_name = (
+            _extract_from_candidates(node, ("divisionName", "division", "divisionAbbrev", "divisionId"))
+            or _extract_from_candidates(team_info, ("divisionName", "division"))
+        )
+        conference_name = _normalize_conference_name(conference_name)
+        division_name = _normalize_division_name(division_name)
+        if not conference_name or not division_name or division_name not in VALID_DIVISIONS:
+            continue
+
+        abbr = (
+            _extract_from_candidates(node, ("teamAbbrev", "abbrev", "triCode", "teamTricode", "teamTriCode"))
+            or _extract_from_candidates(team_info, ("teamAbbrev", "abbrev", "triCode", "teamTricode", "teamTriCode"))
+            or _team_abbreviation(team_info)
+        )
+        if not abbr:
+            continue
+
+        wins = _extract_stat(node, ("wins", "w"))
+        losses = _extract_stat(node, ("losses", "l"))
+        ot = _extract_stat(node, ("ot", "otLosses", "otl"))
+        points = _extract_stat(node, ("points", "pts"))
+
+        key = (conference_name, division_name, abbr)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        entry = {
+            "abbr": abbr,
+            "wins": wins,
+            "losses": losses,
+            "ot": ot,
+            "points": points,
+            "_rank": _extract_rank(node),
+        }
+
+        conference = conferences.setdefault(conference_name, {})
+        conference.setdefault(division_name, []).append(entry)
+
+    return conferences
 
 
 def _coerce_text(value: Any) -> str:
@@ -389,7 +524,7 @@ def _fetch_standings_api_web() -> Optional[dict[str, dict[str, list[dict]]]]:
         logging.error("Failed to fetch NHL standings (api-web fallback): %s", exc)
         return None
 
-    standings_payload = []
+    standings_payload: list = []
     if isinstance(payload, dict):
         for key in ("standings", "records", "groups"):
             value = payload.get(key)
@@ -399,63 +534,27 @@ def _fetch_standings_api_web() -> Optional[dict[str, dict[str, list[dict]]]]:
         else:
             if isinstance(payload.get("rows"), list):
                 standings_payload = [payload]
+    elif isinstance(payload, list):
+        standings_payload = payload
 
-    conferences: dict[str, dict[str, list[dict]]] = {}
+    conferences = _parse_grouped_standings(standings_payload)
 
-    for group in standings_payload:
-        if not isinstance(group, dict):
-            continue
-        rows = None
-        for key in ("teamRecords", "rows", "standings", "standingsRows", "teams"):
-            candidate = group.get(key)
-            if isinstance(candidate, list):
-                rows = candidate
-                break
-        if rows is None:
-            continue
+    if not conferences and isinstance(payload, dict):
+        alternative_groups: list = []
+        for key in (
+            "standingsByConference",
+            "standingsByDivision",
+            "standingsByType",
+            "divisionStandings",
+        ):
+            value = payload.get(key)
+            if isinstance(value, list):
+                alternative_groups.extend(value)
+        if alternative_groups:
+            conferences = _parse_grouped_standings(alternative_groups)
 
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            team_info = row.get("team") if isinstance(row.get("team"), dict) else {}
-            conference_name = (
-                _extract_from_candidates(row, ("conferenceName", "conference", "conferenceAbbrev", "conferenceId"))
-                or _extract_from_candidates(team_info, ("conferenceName", "conference"))
-            )
-            division_name = (
-                _extract_from_candidates(row, ("divisionName", "division", "divisionAbbrev", "divisionId"))
-                or _extract_from_candidates(team_info, ("divisionName", "division"))
-            )
-            conference_name = _normalize_conference_name(conference_name)
-            division_name = _normalize_division_name(division_name)
-            if not conference_name or not division_name:
-                continue
-
-            abbr = (
-                _extract_from_candidates(row, ("teamAbbrev", "abbrev", "triCode", "teamTricode"))
-                or _extract_from_candidates(team_info, ("abbrev", "triCode", "teamTricode"))
-                or _team_abbreviation(team_info)
-            )
-
-            if not abbr:
-                continue
-
-            wins = _extract_stat(row, ("wins", "w"))
-            losses = _extract_stat(row, ("losses", "l"))
-            ot = _extract_stat(row, ("ot", "otLosses", "otl"))
-            points = _extract_stat(row, ("points", "pts"))
-
-            team_entry = {
-                "abbr": abbr,
-                "wins": wins,
-                "losses": losses,
-                "ot": ot,
-                "points": points,
-                "_rank": _extract_rank(row),
-            }
-
-            divisions = conferences.setdefault(conference_name, {})
-            divisions.setdefault(division_name, []).append(team_entry)
+    if not conferences:
+        conferences = _parse_generic_standings(payload)
 
     if not conferences:
         return None
