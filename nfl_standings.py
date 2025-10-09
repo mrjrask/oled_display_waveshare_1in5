@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from collections.abc import Iterable
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable as _Iterable, List, Optional, Tuple
 
 from PIL import Image, ImageDraw
 
@@ -22,8 +23,8 @@ from http_client import get_session
 from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-TITLE_NFC = "NFL Standings – NFC"
-TITLE_AFC = "NFL Standings – AFC"
+TITLE_NFC = "NFC Standings"
+TITLE_AFC = "AFC Standings"
 STANDINGS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings"
 REQUEST_TIMEOUT = 10
 CACHE_TTL = 15 * 60  # seconds
@@ -60,6 +61,13 @@ _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
 _STANDINGS_CACHE: Dict[str, Any] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: Dict[str, Optional[Image.Image]] = {}
+
+_CONFERENCE_ALIASES = {
+    "american football conference": CONFERENCE_AFC_KEY,
+    "national football conference": CONFERENCE_NFC_KEY,
+}
+
+_DIRECTION_KEYWORDS = ("EAST", "WEST", "NORTH", "SOUTH")
 
 DIVISION_ORDER_NFC = ["NFC North", "NFC East", "NFC South", "NFC West"]
 DIVISION_ORDER_AFC = ["AFC North", "AFC East", "AFC South", "AFC West"]
@@ -136,6 +144,11 @@ def _normalize_conference(name: Any) -> str:
     text = name.strip()
     if not text:
         return ""
+    lowered = text.lower()
+    for alias, replacement in _CONFERENCE_ALIASES.items():
+        if alias in lowered:
+            text = re.sub(alias, replacement, text, flags=re.IGNORECASE)
+            break
     upper = text.upper()
     if "AFC" in upper:
         return CONFERENCE_AFC_KEY
@@ -148,6 +161,10 @@ def _normalize_division(name: Any, conference: str = "") -> str:
     if not isinstance(name, str):
         name = ""
     text = (name or "").strip()
+    if not text and conference:
+        return conference
+    for alias, replacement in _CONFERENCE_ALIASES.items():
+        text = re.sub(alias, replacement, text, flags=re.IGNORECASE)
     if text.lower().endswith("division"):
         text = text[: -len("division")].strip()
     parts = text.split()
@@ -180,6 +197,108 @@ def _stat_map(stats: Iterable[dict]) -> dict[str, Any]:
             value = stat.get("displayValue")
         mapping[name.lower()] = value
     return mapping
+
+
+def _first_string(source: Any, keys: _Iterable[str]) -> str:
+    if not isinstance(source, dict):
+        return ""
+    for key in keys:
+        value = source.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _extract_team_info(entry: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(entry, dict):
+        return None
+
+    team = entry.get("team") if isinstance(entry.get("team"), dict) else {}
+    if not isinstance(team, dict):
+        team = {}
+
+    abbr = team.get("abbreviation") or team.get("shortDisplayName") or team.get("displayName")
+    if isinstance(abbr, str):
+        abbr = abbr.strip().upper()
+    else:
+        abbr = ""
+    if not abbr:
+        name = team.get("nickname") or team.get("name") or team.get("displayName") or ""
+        abbr = name[:3].upper() if isinstance(name, str) else ""
+    if not abbr:
+        return None
+
+    stats = _stat_map(entry.get("stats") or [])
+    wins = _normalize_int(stats.get("wins") or stats.get("overallwins"))
+    losses = _normalize_int(stats.get("losses") or stats.get("overalllosses"))
+    ties = _normalize_int(stats.get("ties") or stats.get("overallties") or stats.get("draws"))
+    rank = _normalize_int(stats.get("rank") or stats.get("overallrank") or stats.get("playoffseed"))
+
+    conference_name = ""
+    conference_value = entry.get("conference")
+    if isinstance(conference_value, dict):
+        conference_name = _first_string(conference_value, ("name", "displayName", "abbreviation"))
+    elif isinstance(conference_value, str):
+        conference_name = conference_value
+    if not conference_name and isinstance(team.get("conference"), dict):
+        conference_name = _first_string(team["conference"], ("name", "displayName", "abbreviation"))
+
+    division_name = ""
+    for key in ("division", "group"):
+        value = entry.get(key)
+        if isinstance(value, dict):
+            division_name = _first_string(value, ("displayName", "name", "abbreviation"))
+            if division_name:
+                break
+        elif isinstance(value, str) and value.strip():
+            division_name = value.strip()
+            break
+    if not division_name and isinstance(team.get("division"), dict):
+        division_name = _first_string(team["division"], ("displayName", "name", "abbreviation"))
+
+    return {
+        "abbr": abbr,
+        "wins": wins,
+        "losses": losses,
+        "ties": ties,
+        "rank": rank,
+        "conference_name": conference_name,
+        "division_name": division_name,
+    }
+
+
+def _collect_division_groups(data: Any) -> List[Tuple[str, str, List[dict]]]:
+    groups: List[Tuple[str, str, List[dict]]] = []
+    stack: List[Any] = [data]
+    seen_nodes: set[int] = set()
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            node_id = id(node)
+            if node_id in seen_nodes:
+                continue
+            seen_nodes.add(node_id)
+            standings = node.get("standings")
+            if isinstance(standings, dict):
+                entries = standings.get("entries")
+                if isinstance(entries, list) and entries:
+                    label = _first_string(node, ("displayName", "name", "abbreviation", "label"))
+                    if not label:
+                        label = _first_string(standings, ("displayName", "name", "abbreviation", "label"))
+                    if label:
+                        upper = label.upper()
+                        if any(direction in upper for direction in _DIRECTION_KEYWORDS):
+                            conference_hint = _normalize_conference(label)
+                            if not conference_hint:
+                                conference_hint = _normalize_conference(
+                                    _first_string(standings, ("displayName", "name"))
+                                )
+                            groups.append((conference_hint, label, entries))
+                stack.extend(value for value in standings.values() if isinstance(value, (dict, list)))
+            stack.extend(value for value in node.values() if isinstance(value, (dict, list)))
+        elif isinstance(node, list):
+            stack.extend(item for item in node if isinstance(item, (dict, list)))
+    return groups
 
 
 def _extract_entries(payload: Any) -> List[dict]:
@@ -218,79 +337,85 @@ def _parse_standings(data: Any) -> dict[str, dict[str, List[dict]]]:
         CONFERENCE_AFC_KEY: {},
     }
 
-    entries = _extract_entries(data)
-    if not entries:
-        logging.warning("NFL standings response missing entries")
-        return standings
+    groups = _collect_division_groups(data)
+    added_from_groups = False
+    if groups:
+        for conference_hint, label, entries in groups:
+            for entry in entries:
+                info = _extract_team_info(entry)
+                if not info:
+                    continue
 
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
+                conference_name = (
+                    _normalize_conference(conference_hint)
+                    or _normalize_conference(label)
+                    or _normalize_conference(info.get("conference_name"))
+                    or _normalize_conference(info.get("division_name"))
+                )
+                if conference_name not in standings:
+                    continue
 
-        team = entry.get("team") if isinstance(entry.get("team"), dict) else {}
-        if not isinstance(team, dict):
-            team = {}
+                division_label = label or info.get("division_name") or ""
+                division = _normalize_division(division_label, conference_name)
+                if not division:
+                    division = _normalize_division(info.get("division_name"), conference_name)
+                if not division:
+                    continue
 
-        abbr = team.get("abbreviation") or team.get("shortDisplayName") or team.get("displayName")
-        if isinstance(abbr, str):
-            abbr = abbr.strip().upper()
-        else:
-            abbr = ""
-        if not abbr:
-            name = team.get("nickname") or team.get("name") or team.get("displayName") or ""
-            abbr = name[:3].upper() if isinstance(name, str) else ""
-        if not abbr:
-            continue
+                conference_bucket = standings[conference_name]
+                division_bucket = conference_bucket.setdefault(division, [])
+                order = info["rank"] if info["rank"] > 0 else len(division_bucket) + 1
+                division_bucket.append(
+                    {
+                        "abbr": info["abbr"],
+                        "wins": info["wins"],
+                        "losses": info["losses"],
+                        "ties": info["ties"],
+                        "order": order,
+                    }
+                )
+                added_from_groups = True
 
-        stats = _stat_map(entry.get("stats") or [])
-        wins = _normalize_int(stats.get("wins") or stats.get("overallwins"))
-        losses = _normalize_int(stats.get("losses") or stats.get("overalllosses"))
-        ties = _normalize_int(stats.get("ties") or stats.get("overallties") or stats.get("draws"))
-        rank = _normalize_int(stats.get("rank") or stats.get("overallrank") or stats.get("playoffseed"))
+    if not added_from_groups:
+        entries = _extract_entries(data)
+        if not entries:
+            logging.warning("NFL standings response missing entries")
+            return standings
 
-        conference_name = _normalize_conference(entry.get("conference"))
-        if not conference_name and isinstance(entry.get("conference"), dict):
-            conference_name = _normalize_conference(entry["conference"].get("name") or entry["conference"].get("displayName"))
-        if not conference_name and isinstance(team.get("conference"), dict):
-            conference_name = _normalize_conference(team["conference"].get("name") or team["conference"].get("displayName"))
+        for entry in entries:
+            info = _extract_team_info(entry)
+            if not info:
+                continue
 
-        division_name = None
-        for key in ("division", "group"):
-            value = entry.get(key)
-            if isinstance(value, dict):
-                division_name = value.get("displayName") or value.get("name") or value.get("abbreviation")
-                break
-        if not division_name and isinstance(team.get("division"), dict):
-            div = team["division"]
-            division_name = div.get("displayName") or div.get("name") or div.get("abbreviation")
+            conference_name = _normalize_conference(info.get("conference_name"))
+            if not conference_name and info.get("division_name"):
+                conference_name = _normalize_conference(info.get("division_name"))
+            if conference_name not in standings:
+                if conference_name:
+                    logging.debug(
+                        "NFL standings skipping team %s with unknown conference %s",
+                        info["abbr"],
+                        conference_name,
+                    )
+                continue
 
-        if not conference_name and division_name:
-            upper = str(division_name).upper()
-            if upper.startswith(CONFERENCE_AFC_KEY):
-                conference_name = CONFERENCE_AFC_KEY
-            elif upper.startswith(CONFERENCE_NFC_KEY):
-                conference_name = CONFERENCE_NFC_KEY
+            division = _normalize_division(info.get("division_name"), conference_name)
+            if not division:
+                logging.debug("NFL standings skipping team %s without division", info["abbr"])
+                continue
 
-        if not conference_name:
-            logging.debug("NFL standings skipping team %s without conference", abbr)
-            continue
-
-        division = _normalize_division(division_name or "", conference_name)
-        if not division:
-            logging.debug("NFL standings skipping team %s without division", abbr)
-            continue
-
-        conference_bucket = standings.setdefault(conference_name, {})
-        division_bucket = conference_bucket.setdefault(division, [])
-        division_bucket.append(
-            {
-                "abbr": abbr,
-                "wins": wins,
-                "losses": losses,
-                "ties": ties,
-                "order": rank if rank > 0 else len(division_bucket) + 1,
-            }
-        )
+            conference_bucket = standings[conference_name]
+            division_bucket = conference_bucket.setdefault(division, [])
+            order = info["rank"] if info["rank"] > 0 else len(division_bucket) + 1
+            division_bucket.append(
+                {
+                    "abbr": info["abbr"],
+                    "wins": info["wins"],
+                    "losses": info["losses"],
+                    "ties": info["ties"],
+                    "order": order,
+                }
+            )
 
     # Sort each division by rank fallback to record
     for conference in standings.values():
