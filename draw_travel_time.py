@@ -274,11 +274,12 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     warning_text = "Travel data unavailable · Check Google Directions API"
     warning_width, warning_height = _measure(warning_text, FONT_TRAVEL_HEADER)
 
+    row_count = len(rows)
     content_height = (
         title_height
         + header_gap
-        + len(lane_images) * row_height
-        + max(0, len(lane_images) - 1) * row_gap
+        + row_count * row_height
+        + max(0, row_count - 1) * row_gap
         + outer_margin
     )
     if all_na:
