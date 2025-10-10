@@ -187,7 +187,7 @@ def _format_status(game: dict) -> str:
         if in_intermission:
             return f"INT {period_ord}".strip()
         if time_remaining and time_remaining != "END":
-            return f"{time_remaining} {period_ord}".strip()
+            return f"{period_ord} {time_remaining}".strip()
         if time_remaining == "END" and period_ord:
             return f"End {period_ord}".strip()
         return detailed or "In Progress"
