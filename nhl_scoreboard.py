@@ -59,14 +59,18 @@ COL_X = [0]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT  = clone_font(FONT_TEAM_SPORTS, 18)
-STATUS_FONT = clone_font(FONT_STATUS, 15)
-CENTER_FONT = clone_font(FONT_STATUS, 15)
-TITLE_FONT  = FONT_TITLE_SPORTS
-LOGO_HEIGHT = 22
-LOGO_DIR    = os.path.join(IMAGES_DIR, "nhl")
+SCORE_FONT        = clone_font(FONT_TEAM_SPORTS, 18)
+STATUS_FONT       = clone_font(FONT_STATUS, 15)
+CENTER_FONT       = clone_font(FONT_STATUS, 15)
+TITLE_FONT        = FONT_TITLE_SPORTS
+LOGO_HEIGHT       = 22
+LOGO_DIR          = os.path.join(IMAGES_DIR, "nhl")
+LEAGUE_LOGO_KEYS  = ("NHL", "nhl")
+LEAGUE_LOGO_GAP   = 4
 
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
+_LEAGUE_LOGO: Optional[Image.Image] = None
+_LEAGUE_LOGO_LOADED = False
 
 _SESSION = get_session()
 
@@ -103,6 +107,18 @@ def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
 
     _LOGO_CACHE[cache_key] = None
     return None
+
+
+def _get_league_logo() -> Optional[Image.Image]:
+    global _LEAGUE_LOGO, _LEAGUE_LOGO_LOADED
+    if not _LEAGUE_LOGO_LOADED:
+        for key in LEAGUE_LOGO_KEYS:
+            logo = load_team_logo(LOGO_DIR, key, height=LOGO_HEIGHT)
+            if logo is not None:
+                _LEAGUE_LOGO = logo
+                break
+        _LEAGUE_LOGO_LOADED = True
+    return _LEAGUE_LOGO
 
 
 def _team_logo_abbr(team: dict) -> str:
@@ -788,20 +804,29 @@ def _render_scoreboard(games: list[dict]) -> Image.Image:
     except Exception:
         _, title_h = dd.textsize(TITLE, font=TITLE_FONT)
 
-    content_top = title_h + TITLE_GAP
+    league_logo = _get_league_logo()
+    logo_height = league_logo.height if league_logo else 0
+    logo_gap = LEAGUE_LOGO_GAP if league_logo else 0
+
+    content_top = logo_height + logo_gap + title_h + TITLE_GAP
     img_height = max(HEIGHT, content_top + canvas.height)
     img = Image.new("RGB", (WIDTH, img_height), "black")
     draw = ImageDraw.Draw(img)
+
+    if league_logo:
+        logo_x = (WIDTH - league_logo.width) // 2
+        img.paste(league_logo, (logo_x, 0), league_logo)
+    title_top = logo_height + logo_gap
 
     try:
         l, t, r, b = draw.textbbox((0, 0), TITLE, font=TITLE_FONT)
         tw, th = r - l, b - t
         tx = (WIDTH - tw) // 2 - l
-        ty = 0 - t
+        ty = title_top - t
     except Exception:
         tw, th = draw.textsize(TITLE, font=TITLE_FONT)
         tx = (WIDTH - tw) // 2
-        ty = 0
+        ty = title_top
     draw.text((tx, ty), TITLE, font=TITLE_FONT, fill=(255, 255, 255))
 
     img.paste(canvas, (0, content_top))
@@ -838,15 +863,21 @@ def draw_nhl_scoreboard(display, transition: bool = False) -> ScreenImage:
         clear_display(display)
         img = Image.new("RGB", (WIDTH, HEIGHT), "black")
         draw = ImageDraw.Draw(img)
+        league_logo = _get_league_logo()
+        title_top = 0
+        if league_logo:
+            logo_x = (WIDTH - league_logo.width) // 2
+            img.paste(league_logo, (logo_x, 0), league_logo)
+            title_top = league_logo.height + LEAGUE_LOGO_GAP
         try:
             l, t, r, b = draw.textbbox((0, 0), TITLE, font=TITLE_FONT)
             tw, th = r - l, b - t
             tx = (WIDTH - tw) // 2 - l
-            ty = 0 - t
+            ty = title_top - t
         except Exception:
             tw, th = draw.textsize(TITLE, font=TITLE_FONT)
             tx = (WIDTH - tw) // 2
-            ty = 0
+            ty = title_top
         draw.text((tx, ty), TITLE, font=TITLE_FONT, fill=(255, 255, 255))
         _center_text(draw, "No games", STATUS_FONT, 0, WIDTH, HEIGHT // 2 - STATUS_ROW_H // 2, STATUS_ROW_H)
         if transition:
