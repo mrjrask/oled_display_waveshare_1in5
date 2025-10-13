@@ -65,8 +65,9 @@ CENTER_FONT       = clone_font(FONT_STATUS, 15)
 TITLE_FONT        = FONT_TITLE_SPORTS
 LOGO_HEIGHT       = 22
 LOGO_DIR          = os.path.join(IMAGES_DIR, "mlb")
-LEAGUE_LOGO_KEYS  = ("MLB", "mlb")
-LEAGUE_LOGO_GAP   = 4
+LEAGUE_LOGO_KEYS   = ("MLB", "mlb")
+LEAGUE_LOGO_GAP    = 4
+LEAGUE_LOGO_HEIGHT = max(1, int(round(LOGO_HEIGHT * 1.25)))
 
 # Cache for resized logos {abbr: Image}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
@@ -87,7 +88,7 @@ def _get_league_logo() -> Optional[Image.Image]:
     global _LEAGUE_LOGO_LOADED, _LEAGUE_LOGO
     if not _LEAGUE_LOGO_LOADED:
         for key in LEAGUE_LOGO_KEYS:
-            logo = load_team_logo(LOGO_DIR, key, height=LOGO_HEIGHT)
+            logo = load_team_logo(LOGO_DIR, key, height=LEAGUE_LOGO_HEIGHT)
             if logo is not None:
                 _LEAGUE_LOGO = logo
                 break
