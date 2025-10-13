@@ -11,7 +11,7 @@
     "travel": 0,
     "bears logo": 2,
     "bears next": 2,
-    "nfl logo": 4,
+    "nfl logo": 0,
     "NFL Scoreboard": 4,
     "NFL Standings NFC": 0,
     "NFL Standings AFC": 0,
@@ -20,16 +20,16 @@
     "hawks live": 1,
     "hawks next": 1,
     "hawks next home": 1,
-    "nhl logo": 1,
+    "nhl logo": 0,
     "NHL Scoreboard": 1,
     "NHL Standings West": 3,
     "NHL Standings East": 3,
-    "cubs logo": 1,
+    "cubs logo": 0,
     "cubs stand1": 0,
     "cubs stand2": 0,
-    "cubs last": 1,
+    "cubs last": 0,
     "cubs result": 0,
-    "cubs live": 1,
+    "cubs live": 0,
     "cubs next": 1,
     "cubs next home": 0,
     "sox logo": 0,
@@ -39,7 +39,7 @@
     "sox live": 0,
     "sox next": 0,
     "sox next home": 0,
-    "mlb logo": 1,
+    "mlb logo": 0,
     "MLB Scoreboard": 1,
     "NL Overview": 0,
     "NL East": 0,
@@ -55,3 +55,4 @@
     "NBA Scoreboard": 0
   }
 }
+
