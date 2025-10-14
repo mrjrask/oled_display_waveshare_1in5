@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, Optional
 
 import requests
@@ -34,19 +35,28 @@ _RETRY = Retry(
     raise_on_status=False,
 )
 
+_USE_SYSTEM_PROXIES = (
+    os.environ.get("HTTP_CLIENT_USE_SYSTEM_PROXIES", "").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
+
+
 def _build_session() -> requests.Session:
     session = requests.Session()
+    session.trust_env = _USE_SYSTEM_PROXIES
     session.headers.update(DEFAULT_HEADERS)
     adapter = HTTPAdapter(max_retries=_RETRY)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     return session
 
+
 _SESSION = _build_session()
 
 
 def get_session() -> requests.Session:
     """Return the shared HTTP session."""
+
     return _SESSION
 
 
@@ -61,6 +71,7 @@ def request_json(
     **kwargs: Any,
 ) -> Optional[Dict[str, Any]]:
     """Perform a GET request that returns JSON, with optional quiet logging."""
+
     sess = session or _SESSION
     try:
         response = sess.get(url, params=params, headers=headers, timeout=timeout, **kwargs)
