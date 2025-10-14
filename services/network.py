@@ -1,15 +1,21 @@
 # network.py
 
+import datetime
 import threading
 import time
 import subprocess
 import socket
 import logging
 
-from config import WIFI_CHECK_INTERVAL, WIFI_OFF_DURATION
+from config import (
+    WIFI_CHECK_INTERVAL,
+    WIFI_OFF_DURATION,
+    FONT_DATE_SPORTS,
+    FONT_TIME,
+    FONT_TITLE_SPORTS,
+)
 from config import get_current_ssid  # your helper in config.py
-from utils import clear_display, draw_text_centered
-from draw_date_time import split_time_period, FONT_TITLE_SPORTS, FONT_DATE_SPORTS, FONT_TIME
+from utils import clear_display, draw_text_centered, split_time_period
 from PIL import Image
 
 class ConnectivityMonitor:

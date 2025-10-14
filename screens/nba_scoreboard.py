@@ -39,7 +39,7 @@ from utils import (
     load_team_logo,
     log_call,
 )
-from http_client import get_session
+from services.http_client import get_session
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE               = "NBA Scoreboard"

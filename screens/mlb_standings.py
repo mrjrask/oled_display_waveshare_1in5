@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw
 
 import config
 from utils import clear_display, get_mlb_abbreviation, log_call
-from mlb_team_standings import format_games_back
+from screens.mlb_team_standings import format_games_back
 
 # ─── Fonts / geometry from config ────────────────────────────────────────────
 WIDTH  = config.WIDTH

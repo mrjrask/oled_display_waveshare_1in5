@@ -62,19 +62,35 @@ cd ~/oled_display_waveshare_1in5
 oled_display_waveshare_1in5/
 ├─ main.py
 ├─ config.py
-├─ utils.py
 ├─ data_fetch.py
-├─ wifi_utils.py
-├─ draw_date_time.py
-├─ draw_weather.py
-├─ draw_travel_time.py
-├─ draw_vrnof.py
-├─ draw_inside.py
-├─ draw_bears_schedule.py
-├─ draw_hawks_schedule.py
-├─ mlb_schedule.py
-├─ mlb_standings.py
-├─ mlb_team_standings.py
+├─ screens_catalog.py
+├─ screens_config.json
+├─ utils.py
+├─ scripts_2_text.py
+├─ services/
+│  ├─ __init__.py
+│  ├─ http_client.py              # shared requests.Session + NHL headers
+│  ├─ network.py                  # background Wi-Fi / internet monitor
+│  └─ wifi_utils.py               # Wi-Fi triage exposed to the main loop
+├─ screens/
+│  ├─ __init__.py
+│  ├─ color_palettes.py
+│  ├─ draw_bears_schedule.py
+│  ├─ draw_bulls_schedule.py
+│  ├─ draw_date_time.py
+│  ├─ draw_hawks_schedule.py
+│  ├─ draw_inside.py
+│  ├─ draw_travel_time.py
+│  ├─ draw_vrnof.py
+│  ├─ draw_weather.py
+│  ├─ mlb_schedule.py
+│  ├─ mlb_scoreboard.py
+│  ├─ mlb_standings.py
+│  ├─ mlb_team_standings.py
+│  ├─ nba_scoreboard.py
+│  ├─ nhl_scoreboard.py
+│  ├─ nhl_standings.py
+│  └─ nfl_scoreboard.py / nfl_standings.py
 ├─ images/
 │  ├─ mlb/<ABBR>.png              # MLB team logos (e.g., CUBS.png)
 │  ├─ nfl/<ABBR>.png              # NFL logos used by Bears screen

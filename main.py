@@ -53,41 +53,41 @@ from utils import (
     animate_scroll,
 )
 import data_fetch
-import wifi_utils  # for wifi_utils.wifi_status
+from services import wifi_utils  # for wifi_utils.wifi_status
 
-from draw_date_time      import draw_date, draw_time
-from draw_weather        import draw_weather_screen_1, draw_weather_screen_2
-from draw_vrnof          import draw_vrnof_screen
-from draw_travel_time    import (
+from screens.draw_date_time import draw_date, draw_time
+from screens.draw_weather import draw_weather_screen_1, draw_weather_screen_2
+from screens.draw_vrnof import draw_vrnof_screen
+from screens.draw_travel_time import (
     draw_travel_time_screen,
     get_travel_active_window,
     is_travel_screen_active,
 )
-from draw_bears_schedule import show_bears_next_game
-from draw_bulls_schedule import (
+from screens.draw_bears_schedule import show_bears_next_game
+from screens.draw_bulls_schedule import (
     draw_last_bulls_game,
     draw_live_bulls_game,
     draw_sports_screen_bulls,
     draw_bulls_next_home_game,
 )
-from draw_hawks_schedule import (
+from screens.draw_hawks_schedule import (
     draw_last_hawks_game,
     draw_live_hawks_game,
     draw_sports_screen_hawks,
     draw_hawks_next_home_game,
 )
-from mlb_schedule        import (
+from screens.mlb_schedule import (
     draw_last_game,
     draw_box_score,
     draw_sports_screen,
     draw_next_home_game,
     draw_cubs_result,
 )
-from mlb_team_standings  import (
+from screens.mlb_team_standings import (
     draw_standings_screen1,
     draw_standings_screen2,
 )
-from mlb_standings       import (
+from screens.mlb_standings import (
     draw_NL_Overview,
     draw_AL_Overview,
     draw_NL_East,
@@ -99,19 +99,19 @@ from mlb_standings       import (
     draw_AL_West,
     draw_AL_WildCard,
 )
-from mlb_scoreboard      import draw_mlb_scoreboard
-from nba_scoreboard      import draw_nba_scoreboard
-from nhl_scoreboard      import draw_nhl_scoreboard
-from nhl_standings       import (
+from screens.mlb_scoreboard import draw_mlb_scoreboard
+from screens.nba_scoreboard import draw_nba_scoreboard
+from screens.nhl_scoreboard import draw_nhl_scoreboard
+from screens.nhl_standings import (
     draw_nhl_standings_east,
     draw_nhl_standings_west,
 )
-from nfl_scoreboard      import draw_nfl_scoreboard
-from nfl_standings      import (
+from screens.nfl_scoreboard import draw_nfl_scoreboard
+from screens.nfl_standings import (
     draw_nfl_standings_afc,
     draw_nfl_standings_nfc,
 )
-from draw_inside import draw_inside
+from screens.draw_inside import draw_inside
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(

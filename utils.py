@@ -46,7 +46,7 @@ from waveshare_OLED.OLED_1in5_rgb import OLED_1in5_rgb
 # Project config
 from config import WIDTH, HEIGHT, CENTRAL_TIME, SPI_FREQUENCY
 # Color utilities
-from color_palettes import random_color
+from screens.color_palettes import random_color
 # Colored logging
 from colorama import init as colorama_init, Fore, Style
 colorama_init(autoreset=True)
