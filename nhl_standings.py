@@ -78,13 +78,13 @@ COLUMN_LAYOUT = {
     "wins": 72,
     "losses": 88,
     "ot": 104,
-    "points": 122,
+    "points": WIDTH - LEFT_MARGIN,
 }
 COLUMN_HEADERS = [
     ("", "team", "left"),
     ("W", "wins", "right"),
     ("L", "losses", "right"),
-    ("OT", "ot", "right"),
+    ("OTL", "ot", "right"),
     ("PTS", "points", "right"),
 ]
 
