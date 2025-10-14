@@ -8,13 +8,13 @@
     "inside": 4,
     "verano logo": 0,
     "vrnof": 4,
-    "travel": 0,
+    "travel": 1,
     "bears logo": 4,
     "bears next": 4,
     "nfl logo": 0,
     "NFL Scoreboard": 4,
-    "NFL Standings NFC": 7,
-    "NFL Standings AFC": 7,
+    "NFL Standings NFC": 6,
+    "NFL Standings AFC": 6,
     "hawks logo": 0,
     "hawks last": 2,
     "hawks live": 2,
@@ -27,8 +27,8 @@
     "bulls next home": 0,
     "nhl logo": 0,
     "NHL Scoreboard": 3,
-    "NHL Standings West": 6,
-    "NHL Standings East": 6,
+    "NHL Standings West": 5,
+    "NHL Standings East": 5,
     "cubs logo": 0,
     "cubs stand1": 0,
     "cubs stand2": 0,
@@ -57,7 +57,7 @@
     "AL West": 0,
     "AL Wild Card": 0,
     "nba logo": 0,
-    "NBA Scoreboard": 0
+    "NBA Scoreboard": 7
   }
 }
 
