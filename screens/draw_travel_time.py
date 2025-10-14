@@ -384,14 +384,33 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     row_left = outer_margin
     row_right = WIDTH - outer_margin
 
-    for row in rows:
+    # When the travel screen has vertical space to spare, expand the route tiles so
+    # that they fill the region below the title instead of floating towards the
+    # top. This keeps the layout balanced on taller canvases (e.g. the 128px OLED).
+    row_box_heights: List[int]
+    if rows:
+        available_height = HEIGHT - outer_margin - y
+        base_total_height = row_count * row_height + (row_count - 1) * row_gap
+        extra_space = max(0, available_height - base_total_height)
+
+        if extra_space and row_count:
+            even_extra, remainder = divmod(extra_space, row_count)
+            row_box_heights = [row_height + even_extra] * row_count
+            for index in range(remainder):
+                row_box_heights[index] += 1
+        else:
+            row_box_heights = [row_height] * row_count
+    else:
+        row_box_heights = []
+
+    for row, box_height in zip(rows, row_box_heights):
         sign_image = row["sign"]
         normalized = row["normalized"]
         color = row["color"]
         display_color = color if normalized.upper() != "N/A" else (230, 230, 230)
 
         row_top = y
-        row_bottom = y + row_height
+        row_bottom = y + box_height
 
         draw.rounded_rectangle(
             (row_left, row_top, row_right, row_bottom),
@@ -401,13 +420,13 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
         )
 
         sign_x = row_left + row_padding_x
-        sign_y = row_top + (row_height - sign_image.height) // 2
+        sign_y = row_top + (box_height - sign_image.height) // 2
         img.paste(sign_image, (sign_x, sign_y), sign_image)
 
         time_width = row["time_width"]
         time_height = row["time_height"]
         time_x = row_right - row_padding_x - time_width
-        time_y = row_top + (row_height - time_height) // 2
+        time_y = row_top + (box_height - time_height) // 2
         draw.text((time_x, time_y), normalized, font=time_font, fill=display_color)
 
         y = row_bottom + row_gap
