@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import re
@@ -28,6 +29,11 @@ TITLE_AFC = "AFC Standings"
 STANDINGS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings"
 REQUEST_TIMEOUT = 10
 CACHE_TTL = 15 * 60  # seconds
+
+OFFSEASON_START = (2, 15)  # Feb 15
+OFFSEASON_END = (8, 1)  # Aug 1
+FALLBACK_MESSAGE_OFFSEASON = "NFL standings return this fall"
+FALLBACK_MESSAGE_UNAVAILABLE = "NFL standings unavailable"
 
 CONFERENCE_NFC_KEY = "NFC"
 CONFERENCE_AFC_KEY = "AFC"
@@ -59,7 +65,7 @@ _SESSION = get_session()
 _MEASURE_IMG = Image.new("RGB", (1, 1))
 _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
-_STANDINGS_CACHE: Dict[str, Any] = {"timestamp": 0.0, "data": None}
+_STANDINGS_CACHE: Dict[str, Any] = {"timestamp": 0.0, "data": None, "message": None}
 _LOGO_CACHE: Dict[str, Optional[Image.Image]] = {}
 
 _CONFERENCE_ALIASES = {
@@ -620,12 +626,31 @@ def _parse_standings(data: Any) -> dict[str, dict[str, List[dict]]]:
     return standings
 
 
-def _fetch_standings_data() -> dict[str, dict[str, List[dict]]]:
+def _in_offseason(today: Optional[datetime.date] = None) -> bool:
+    today = today or datetime.datetime.now().date()
+    start = datetime.date(today.year, *OFFSEASON_START)
+    end = datetime.date(today.year, *OFFSEASON_END)
+    return start <= today < end
+
+
+def _fetch_standings_data() -> Tuple[dict[str, dict[str, List[dict]]], Optional[str]]:
     now = time.time()
     cached = _STANDINGS_CACHE.get("data")
     timestamp = float(_STANDINGS_CACHE.get("timestamp", 0.0))
+    cached_message = _STANDINGS_CACHE.get("message")
     if cached and now - timestamp < CACHE_TTL:
-        return cached  # type: ignore[return-value]
+        return cached, cached_message  # type: ignore[return-value]
+
+    if _in_offseason():
+        standings = {
+            CONFERENCE_NFC_KEY: {},
+            CONFERENCE_AFC_KEY: {},
+        }
+        _STANDINGS_CACHE["data"] = standings
+        _STANDINGS_CACHE["timestamp"] = now
+        _STANDINGS_CACHE["message"] = FALLBACK_MESSAGE_OFFSEASON
+        logging.info("NFL standings offseason fallback engaged; suppressing data display")
+        return standings, FALLBACK_MESSAGE_OFFSEASON
 
     try:
         response = _SESSION.get(STANDINGS_URL, timeout=REQUEST_TIMEOUT)
@@ -634,16 +659,26 @@ def _fetch_standings_data() -> dict[str, dict[str, List[dict]]]:
     except Exception as exc:  # pragma: no cover - network guard
         logging.error("Failed to fetch NFL standings: %s", exc)
         if isinstance(cached, dict):
-            return cached  # type: ignore[return-value]
-        return {
+            _STANDINGS_CACHE["timestamp"] = now
+            _STANDINGS_CACHE["message"] = cached_message or FALLBACK_MESSAGE_UNAVAILABLE
+            return cached, _STANDINGS_CACHE["message"]  # type: ignore[return-value]
+        standings = {
             CONFERENCE_NFC_KEY: {},
             CONFERENCE_AFC_KEY: {},
         }
+        _STANDINGS_CACHE["data"] = standings
+        _STANDINGS_CACHE["timestamp"] = now
+        _STANDINGS_CACHE["message"] = FALLBACK_MESSAGE_UNAVAILABLE
+        return standings, FALLBACK_MESSAGE_UNAVAILABLE
 
     standings = _parse_standings(payload)
     _STANDINGS_CACHE["data"] = standings
     _STANDINGS_CACHE["timestamp"] = now
-    return standings
+    fallback_message = None
+    if not any(standings.values()):
+        fallback_message = FALLBACK_MESSAGE_UNAVAILABLE
+    _STANDINGS_CACHE["message"] = fallback_message
+    return standings, fallback_message
 
 
 def _division_section_height(team_count: int) -> int:
@@ -793,12 +828,19 @@ def _scroll_display(display, full_img: Image.Image):
     time.sleep(SCROLL_PAUSE_BOTTOM)
 
 
-def _render_and_display(display, title: str, division_order: List[str], standings: Dict[str, List[dict]], transition: bool) -> ScreenImage:
+def _render_and_display(
+    display,
+    title: str,
+    division_order: List[str],
+    standings: Dict[str, List[dict]],
+    transition: bool,
+    fallback_message: Optional[str] = None,
+) -> ScreenImage:
     if not any(standings.values()):
         clear_display(display)
         img = Image.new("RGB", (WIDTH, HEIGHT), "black")
         draw = ImageDraw.Draw(img)
-        message = "No standings"
+        message = fallback_message or "No standings"
         try:
             l, t, r, b = draw.textbbox((0, 0), title, font=TITLE_FONT)
             tw, th = r - l, b - t
@@ -840,16 +882,30 @@ def _render_and_display(display, title: str, division_order: List[str], standing
 # ─── Public API ───────────────────────────────────────────────────────────────
 @log_call
 def draw_nfl_standings_nfc(display, transition: bool = False) -> ScreenImage:
-    standings_by_conf = _fetch_standings_data()
+    standings_by_conf, fallback_message = _fetch_standings_data()
     conference = standings_by_conf.get(CONFERENCE_NFC_KEY, {})
-    return _render_and_display(display, TITLE_NFC, DIVISION_ORDER_NFC, conference, transition)
+    return _render_and_display(
+        display,
+        TITLE_NFC,
+        DIVISION_ORDER_NFC,
+        conference,
+        transition,
+        fallback_message,
+    )
 
 
 @log_call
 def draw_nfl_standings_afc(display, transition: bool = False) -> ScreenImage:
-    standings_by_conf = _fetch_standings_data()
+    standings_by_conf, fallback_message = _fetch_standings_data()
     conference = standings_by_conf.get(CONFERENCE_AFC_KEY, {})
-    return _render_and_display(display, TITLE_AFC, DIVISION_ORDER_AFC, conference, transition)
+    return _render_and_display(
+        display,
+        TITLE_AFC,
+        DIVISION_ORDER_AFC,
+        conference,
+        transition,
+        fallback_message,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
