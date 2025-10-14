@@ -251,12 +251,49 @@ if ENABLE_VIDEO:
 
 _archive_lock = threading.Lock()
 
+
+def _sanitize_directory_name(name: str) -> str:
+    """Return a filesystem-friendly directory name while keeping spaces."""
+
+    safe = name.strip().replace("/", "-").replace("\\", "-")
+    safe = "".join(ch for ch in safe if ch.isalnum() or ch in (" ", "-", "_"))
+    return safe or "Screens"
+
+
+def _sanitize_filename_prefix(name: str) -> str:
+    """Return a filesystem-friendly filename prefix."""
+
+    safe = name.strip().replace("/", "-").replace("\\", "-")
+    safe = safe.replace(" ", "_")
+    safe = "".join(ch for ch in safe if ch.isalnum() or ch in ("_", "-"))
+    return safe or "screen"
+
+
+def _save_screenshot(sid: str, img: Image.Image) -> None:
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    folder = _sanitize_directory_name(sid)
+    prefix = _sanitize_filename_prefix(sid)
+    target_dir = os.path.join(SCREENSHOT_DIR, folder)
+    os.makedirs(target_dir, exist_ok=True)
+    path = os.path.join(target_dir, f"{prefix}_{ts}.png")
+
+    try:
+        img.save(path)
+    except Exception:
+        logging.warning(f"⚠️ Screenshot save failed for '{sid}'")
+
+
 def _list_screenshot_files():
     try:
-        return sorted(
-            f for f in os.listdir(SCREENSHOT_DIR)
-            if f.lower().endswith(ALLOWED_SCREEN_EXTS)
-        )
+        results = []
+        for root, _dirs, files in os.walk(SCREENSHOT_DIR):
+            for fname in files:
+                if not fname.lower().endswith(ALLOWED_SCREEN_EXTS):
+                    continue
+                rel_dir = os.path.relpath(root, SCREENSHOT_DIR)
+                rel_path = fname if rel_dir == "." else os.path.join(rel_dir, fname)
+                results.append(rel_path)
+        return sorted(results)
     except Exception:
         return []
 
@@ -287,7 +324,11 @@ def maybe_archive_screenshots():
                     day_dir   = os.path.join(SCREENSHOT_ARCHIVE_BASE, now.strftime("%Y%m%d"))
                     batch_dir = os.path.join(day_dir, now.strftime("%H%M%S"))
                     os.makedirs(batch_dir, exist_ok=True)
-                shutil.move(src, os.path.join(batch_dir, fname))
+                dest = os.path.join(batch_dir, fname)
+                dest_dir = os.path.dirname(dest)
+                if dest_dir and not os.path.exists(dest_dir):
+                    os.makedirs(dest_dir, exist_ok=True)
+                shutil.move(src, dest)
                 moved += 1
             except Exception as e:
                 logging.warning(f"⚠️  Could not move '{fname}' to archive: {e}")
@@ -689,12 +730,7 @@ def main_loop():
                 # Logos return an image directly
                 if "logo" in sid and isinstance(img, Image.Image):
                     if ENABLE_SCREENSHOTS:
-                        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                        path = os.path.join(SCREENSHOT_DIR, f"{sid.replace(' ', '_')}_{ts}.png")
-                        try:
-                            img.save(path)
-                        except Exception:
-                            logging.warning(f"⚠️ Screenshot save failed for '{sid}'")
+                        _save_screenshot(sid, img)
                         maybe_archive_screenshots()
                     if ENABLE_VIDEO and video_out:
                         import cv2, numpy as np
@@ -708,13 +744,7 @@ def main_loop():
                     if not already_displayed:
                         animate_fade_in(display, img, steps=8, delay=0.015)
                     if ENABLE_SCREENSHOTS:
-                        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                        safe = sid.replace(" ", "_").replace(".", "")
-                        path = os.path.join(SCREENSHOT_DIR, f"{safe}_{ts}.png")
-                        try:
-                            img.save(path)
-                        except Exception:
-                            logging.warning(f"⚠️ Screenshot save failed for '{sid}'")
+                        _save_screenshot(sid, img)
                         maybe_archive_screenshots()
                     if ENABLE_VIDEO and video_out:
                         import cv2, numpy as np
