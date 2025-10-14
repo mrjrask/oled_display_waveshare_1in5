@@ -18,7 +18,6 @@ from config import (
     CENTRAL_TIME,
     FONT_TITLE_SPORTS,
     FONT_TRAVEL_HEADER,
-    FONT_TRAVEL_TITLE,
     FONT_TRAVEL_VALUE,
     GOOGLE_MAPS_API_KEY,
     HEIGHT,
@@ -323,33 +322,26 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
 
     rows: List[Dict[str, Any]] = []
     time_font = FONT_TRAVEL_VALUE
-    label_font = FONT_TRAVEL_TITLE
 
     max_sign_height = 0
     max_time_height = 0
-    max_label_height = 0
 
-    for key, label, factory, color in lane_definitions:
+    for key, _label, factory, color in lane_definitions:
         time_result = times.get(key, TravelTimeResult("N/A"))
         normalized = time_result.normalized()
         sign_image = factory()
         time_width, time_height = _measure(normalized, time_font)
-        label_width, label_height = _measure(label, label_font)
 
         max_sign_height = max(max_sign_height, sign_image.height)
         max_time_height = max(max_time_height, time_height)
-        max_label_height = max(max_label_height, label_height)
 
         rows.append(
             {
                 "sign": sign_image,
                 "normalized": normalized,
                 "color": color,
-                "label": label,
                 "time_width": time_width,
                 "time_height": time_height,
-                "label_width": label_width,
-                "label_height": label_height,
             }
         )
 
@@ -359,7 +351,7 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     row_padding = 12
     row_gap = 10
     header_gap = 6
-    row_height = max(max_sign_height, max_time_height, max_label_height) + 2 * row_padding
+    row_height = max(max_sign_height, max_time_height) + 2 * row_padding
 
     all_na = all(row["normalized"].upper() == "N/A" for row in rows)
     warning_text = "Travel data unavailable · Check Google Directions API"
@@ -390,14 +382,11 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
     y = title_height + header_gap
     row_left = outer_margin
     row_right = WIDTH - outer_margin
-    row_inner_gap = 10
 
     for row in rows:
         sign_image = row["sign"]
         normalized = row["normalized"]
         color = row["color"]
-        label = row["label"]
-
         display_color = color if normalized.upper() != "N/A" else (230, 230, 230)
 
         row_top = y
@@ -414,18 +403,11 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
         sign_y = row_top + (row_height - sign_image.height) // 2
         img.paste(sign_image, (sign_x, sign_y), sign_image)
 
-        text_left = sign_x + sign_image.width + row_inner_gap
         time_width = row["time_width"]
         time_height = row["time_height"]
         time_x = row_right - row_padding - time_width
         time_y = row_top + (row_height - time_height) // 2
         draw.text((time_x, time_y), normalized, font=time_font, fill=display_color)
-
-        label_width = row["label_width"]
-        label_height = row["label_height"]
-        label_x = text_left
-        label_y = row_top + (row_height - label_height) // 2
-        draw.text((label_x, label_y), label, font=label_font, fill=(235, 235, 235))
 
         y = row_bottom + row_gap
 
