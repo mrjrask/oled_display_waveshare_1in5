@@ -6,8 +6,10 @@ Displays VRNOF stock price, change, and all-time P/L on SSD1351 RGB OLED,
 with a 10-minute freshness requirement. Title and all-time P/L remain fixed; price/change vertically centered on screen.
 Exact cost-basis calculation from individual lots.
 """
-import time
 import logging
+import os
+import time
+
 from PIL import Image, ImageDraw
 import yfinance as yf
 
@@ -20,7 +22,8 @@ from config import (
     FONT_STOCK_TITLE,
     FONT_STOCK_PRICE,
     FONT_STOCK_CHANGE,
-    FONT_STOCK_TEXT
+    FONT_STOCK_TEXT,
+    IMAGES_DIR,
 )
 from utils import clear_display, log_call
 
@@ -32,6 +35,27 @@ _cache = {
     "all_time":    None,
     "ts":          0.0
 }
+
+LOGO_HEIGHT = 28
+LOGO_GAP = 4
+LOGO_PATH = os.path.join(IMAGES_DIR, "verano.jpg")
+_LOGO = None
+
+
+def _get_logo() -> Image.Image | None:
+    global _LOGO
+    if _LOGO is not None:
+        return _LOGO
+    try:
+        logo = Image.open(LOGO_PATH).convert("RGBA")
+        ratio = LOGO_HEIGHT / logo.height
+        width = max(1, int(round(logo.width * ratio)))
+        height = LOGO_HEIGHT
+        _LOGO = logo.resize((width, height), Image.ANTIALIAS)
+    except Exception as exc:
+        logging.warning("VRNOF: failed to load logo at %s: %s", LOGO_PATH, exc)
+        _LOGO = None
+    return _LOGO
 
 def _fetch_price(symbol: str):
     """Fetch latest price + change; update cache."""
@@ -96,12 +120,18 @@ def _build_image(symbol: str = "VRNOF") -> Image.Image:
         _fetch_price(symbol)
 
     # Fallback when no price
+    logo = _get_logo()
     if _cache["price"] is None:
         img = Image.new("RGB", (WIDTH, HEIGHT), "black")
         draw = ImageDraw.Draw(img)
         title = symbol
+        title_top = 2
+        if logo:
+            logo_x = (WIDTH - logo.width) // 2
+            img.paste(logo, (logo_x, 0), logo)
+            title_top = logo.height + LOGO_GAP
         w_t, h_t = draw.textsize(title, font=FONT_STOCK_TITLE)
-        draw.text(((WIDTH - w_t)//2, 2), title, font=FONT_STOCK_TITLE, fill=(255,255,255))
+        draw.text(((WIDTH - w_t)//2, title_top), title, font=FONT_STOCK_TITLE, fill=(255,255,255))
         msg = "Price unavailable"
         w_m, h_m = draw.textsize(msg, font=FONT_STOCK_TEXT)
         draw.text(((WIDTH - w_m)//2, HEIGHT//2 - h_m//2), msg, font=FONT_STOCK_TEXT, fill=(200,200,200))
@@ -119,10 +149,16 @@ def _build_image(symbol: str = "VRNOF") -> Image.Image:
     img = Image.new("RGB", (WIDTH, HEIGHT), "black")
     draw = ImageDraw.Draw(img)
 
-    # Title fixed at top
+    title_top = 2
+    if logo:
+        logo_x = (WIDTH - logo.width) // 2
+        img.paste(logo, (logo_x, 0), logo)
+        title_top = logo.height + LOGO_GAP
+
+    # Title fixed at top (below logo when present)
     title = symbol
     w_title, h_title = draw.textsize(title, font=FONT_STOCK_TITLE)
-    draw.text(((WIDTH - w_title)//2, 2), title, font=FONT_STOCK_TITLE, fill=(255,255,255))
+    draw.text(((WIDTH - w_title)//2, title_top), title, font=FONT_STOCK_TITLE, fill=(255,255,255))
 
     # All-time P/L fixed at bottom
     if all_time:
