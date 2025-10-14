@@ -34,7 +34,7 @@ CACHE_TTL = 15 * 60  # seconds
 CONFERENCE_WEST_KEY = "Western"
 CONFERENCE_EAST_KEY = "Eastern"
 
-LOGO_DIR = os.path.join(IMAGES_DIR, "nhl")
+LOGO_DIR = os.path.join(IMAGES_DIR, "NHL")
 LOGO_HEIGHT = 20
 LEFT_MARGIN = 4
 ROW_PADDING = 2
