@@ -53,6 +53,7 @@ SCROLL_PAUSE_BOTTOM = 0.5
 TITLE_FONT = FONT_TITLE_SPORTS
 DIVISION_FONT = clone_font(FONT_TITLE_SPORTS, 14)
 COLUMN_FONT = clone_font(FONT_STATUS, 13)
+COLUMN_FONT_POINTS = clone_font(FONT_STATUS, 9)
 ROW_FONT = clone_font(FONT_STATUS, 14)
 
 WHITE = (255, 255, 255)
@@ -100,7 +101,12 @@ def _text_size(text: str, font) -> tuple[int, int]:
 
 ROW_TEXT_HEIGHT = _text_size("PTS", ROW_FONT)[1]
 ROW_HEIGHT = max(LOGO_HEIGHT, ROW_TEXT_HEIGHT) + ROW_PADDING * 2
-COLUMN_TEXT_HEIGHT = max(_text_size(label, COLUMN_FONT)[1] for label, _, _ in COLUMN_HEADERS)
+COLUMN_HEADER_FONTS = {"points": COLUMN_FONT_POINTS}
+
+COLUMN_TEXT_HEIGHT = max(
+    _text_size(label, COLUMN_HEADER_FONTS.get(key, COLUMN_FONT))[1]
+    for label, key, _ in COLUMN_HEADERS
+)
 COLUMN_ROW_HEIGHT = COLUMN_TEXT_HEIGHT + 2
 DIVISION_TEXT_HEIGHT = _text_size("Metropolitan", DIVISION_FONT)[1]
 
@@ -601,7 +607,8 @@ def _draw_division(img: Image.Image, draw: ImageDraw.ImageDraw, top: int, title:
     y += 2
     header_top = y
     for label, key, align in COLUMN_HEADERS:
-        _draw_text(draw, label, COLUMN_FONT, COLUMN_LAYOUT[key], header_top, COLUMN_ROW_HEIGHT, align)
+        font = COLUMN_HEADER_FONTS.get(key, COLUMN_FONT)
+        _draw_text(draw, label, font, COLUMN_LAYOUT[key], header_top, COLUMN_ROW_HEIGHT, align)
     y += COLUMN_ROW_HEIGHT + COLUMN_GAP_BELOW
 
     for team in teams:
