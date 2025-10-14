@@ -1,6 +1,6 @@
 # OLED Scoreboard & Info Display (Waveshare 1.5" RGB SSD1351)
 
-A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Waveshare 1.5" RGB OLED (SSD1351). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
+A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and a Waveshare 1.5" RGB OLED (SSD1351). It cycles through date/time, weather, travel time, indoor sensors, stocks, Blackhawks, Bulls & Bears screens, MLB standings, and Cubs/White Sox game views (last/live/next).
 
 > **Highlights**
 > - Smooth animations: scroll and fade‑in
@@ -168,6 +168,7 @@ Or copy `.env.example` to `.env` and load it with your preferred process manager
 - **Travel:** Maps ETA using your configured mode.
 - **Bears Next:** opponent and logos row, formatted bottom line.
 - **Blackhawks:** last/live/next based on schedule feed, logos included.
+- **Bulls:** last/live/next/home powered by the NBA live scoreboard feed with team logos.
 - **MLB (Cubs/Sox):**
   - **Last Game:** box score with **bold W/L** in the title.
   - **Live Game:** box score with inning/state as the bottom label.

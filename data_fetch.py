@@ -13,6 +13,7 @@ import pytz
 import requests
 
 from http_client import NHL_HEADERS, get_session
+from nba_scoreboard import _fetch_games_for_date as _nba_fetch_games_for_date
 
 from config import (
     OWM_API_KEY,
@@ -27,6 +28,8 @@ from config import (
     CENTRAL_TIME,
     OPEN_METEO_URL,
     OPEN_METEO_PARAMS,
+    NBA_TEAM_ID,
+    NBA_TEAM_TRICODE,
 )
 
 # ─── Shared HTTP session ─────────────────────────────────────────────────────
@@ -212,6 +215,186 @@ def _same_game(a, b):
         b_away = _team_id(b.get("awayTeam") or b.get("away_team") or {})
         return a_home == b_home and a_away == b_away
     return False
+
+
+# -----------------------------------------------------------------------------
+# NBA — Chicago Bulls
+# -----------------------------------------------------------------------------
+_BULLS_TEAM_ID = str(NBA_TEAM_ID)
+_BULLS_TRICODE = (NBA_TEAM_TRICODE or "CHI").upper()
+_NBA_LOOKBACK_DAYS = 7
+_NBA_LOOKAHEAD_DAYS = 14
+
+
+def _parse_nba_datetime(value):
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ"):
+        try:
+            parsed = datetime.datetime.strptime(text, fmt)
+        except Exception:
+            continue
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed.astimezone(CENTRAL_TIME)
+    try:
+        parsed = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(CENTRAL_TIME)
+
+
+def _copy_nba_team(entry):
+    if not isinstance(entry, dict):
+        return {}
+    cloned = dict(entry)
+    team_info = cloned.get("team")
+    if isinstance(team_info, dict):
+        cloned["team"] = dict(team_info)
+    return cloned
+
+
+def _augment_nba_game(game):
+    if not isinstance(game, dict):
+        return None
+    cloned = dict(game)
+    teams = cloned.get("teams")
+    if isinstance(teams, dict):
+        cloned_teams = {}
+        for side in ("home", "away"):
+            cloned_teams[side] = _copy_nba_team(teams.get(side) or {})
+        cloned["teams"] = cloned_teams
+    start_local = cloned.get("_start_local")
+    if not isinstance(start_local, datetime.datetime):
+        start_local = _parse_nba_datetime(cloned.get("gameDate"))
+    if isinstance(start_local, datetime.datetime):
+        cloned["_start_local"] = start_local
+        cloned["officialDate"] = start_local.date().isoformat()
+    else:
+        date_text = (cloned.get("officialDate") or cloned.get("gameDate") or "").strip()
+        cloned["officialDate"] = date_text[:10]
+    return cloned
+
+
+def _is_bulls_team(entry):
+    if not isinstance(entry, dict):
+        return False
+    team_info = entry.get("team") if isinstance(entry.get("team"), dict) else entry
+    team_id = str(team_info.get("id") or team_info.get("teamId") or "")
+    if team_id and team_id == _BULLS_TEAM_ID:
+        return True
+    tri = str(team_info.get("triCode") or team_info.get("abbreviation") or "").upper()
+    return tri == _BULLS_TRICODE if tri else False
+
+
+def _is_bulls_game(game):
+    if not isinstance(game, dict):
+        return False
+    teams = game.get("teams") or {}
+    return _is_bulls_team(teams.get("home")) or _is_bulls_team(teams.get("away"))
+
+
+def _nba_game_state(game):
+    status = game.get("status") or {}
+    abstract = str(status.get("abstractGameState") or "").lower()
+    if abstract:
+        return abstract
+    detailed = str(status.get("detailedState") or "").lower()
+    if "final" in detailed:
+        return "final"
+    if "live" in detailed or "progress" in detailed:
+        return "live"
+    if "preview" in detailed or "schedule" in detailed or "pregame" in detailed:
+        return "preview"
+    code = str(status.get("statusCode") or "")
+    if code == "3":
+        return "final"
+    if code == "2":
+        return "live"
+    if code == "1":
+        return "preview"
+    return detailed
+
+
+def _get_bulls_games_for_day(day):
+    try:
+        games = _nba_fetch_games_for_date(day)
+    except Exception as exc:
+        logging.error("Failed to fetch NBA scoreboard for %s: %s", day, exc)
+        return []
+    results = []
+    for game in games or []:
+        if not _is_bulls_game(game):
+            continue
+        augmented = _augment_nba_game(game)
+        if augmented:
+            results.append(augmented)
+    return results
+
+
+def _future_bulls_games(days_forward):
+    today = datetime.datetime.now(CENTRAL_TIME).date()
+    for delta in range(0, days_forward + 1):
+        day = today + datetime.timedelta(days=delta)
+        for game in _get_bulls_games_for_day(day):
+            yield game
+
+
+def _past_bulls_games(days_back):
+    today = datetime.datetime.now(CENTRAL_TIME).date()
+    for delta in range(0, days_back + 1):
+        day = today - datetime.timedelta(days=delta)
+        games = _get_bulls_games_for_day(day)
+        for game in reversed(games):
+            yield game
+
+
+def fetch_bulls_next_game():
+    try:
+        for game in _future_bulls_games(_NBA_LOOKAHEAD_DAYS):
+            if _nba_game_state(game) in {"preview", "scheduled", "pregame"}:
+                return game
+    except Exception as exc:
+        logging.error("Error fetching next Bulls game: %s", exc)
+    return None
+
+
+def fetch_bulls_next_home_game():
+    try:
+        for game in _future_bulls_games(_NBA_LOOKAHEAD_DAYS):
+            teams = game.get("teams") or {}
+            if _is_bulls_team(teams.get("home")) and _nba_game_state(game) in {"preview", "scheduled", "pregame"}:
+                return game
+    except Exception as exc:
+        logging.error("Error fetching next Bulls home game: %s", exc)
+    return None
+
+
+def fetch_bulls_last_game():
+    try:
+        for game in _past_bulls_games(_NBA_LOOKBACK_DAYS):
+            if _nba_game_state(game) == "final":
+                return game
+    except Exception as exc:
+        logging.error("Error fetching last Bulls game: %s", exc)
+    return None
+
+
+def fetch_bulls_live_game():
+    try:
+        for game in _future_bulls_games(0):
+            if _nba_game_state(game) == "live":
+                return game
+        for game in _past_bulls_games(1):
+            if _nba_game_state(game) == "live":
+                return game
+    except Exception as exc:
+        logging.error("Error fetching live Bulls game: %s", exc)
+    return None
 
 
 def fetch_blackhawks_next_home_game():
