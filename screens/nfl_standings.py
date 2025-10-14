@@ -491,6 +491,26 @@ def _extract_entries(payload: Any) -> List[dict]:
     return candidates[0][1]
 
 
+def _find_all_team_entries(payload: Any) -> List[dict]:
+    """Return every dict that looks like a standings entry within *payload*."""
+
+    entries: List[dict] = []
+    stack: List[Any] = [payload]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            team = node.get("team")
+            stats = node.get("stats")
+            if isinstance(team, dict) and isinstance(stats, list):
+                entries.append(node)
+
+            stack.extend(value for value in node.values() if isinstance(value, (dict, list)))
+        elif isinstance(node, list):
+            stack.extend(item for item in node if isinstance(item, (dict, list)))
+
+    return entries
+
+
 def _parse_standings(data: Any) -> dict[str, dict[str, List[dict]]]:
     standings: dict[str, dict[str, List[dict]]] = {
         CONFERENCE_NFC_KEY: {},
@@ -539,9 +559,12 @@ def _parse_standings(data: Any) -> dict[str, dict[str, List[dict]]]:
     if not added_from_groups:
         entries = _extract_entries(data)
         if not entries:
+            entries = _find_all_team_entries(data)
+        if not entries:
             logging.warning("NFL standings response missing entries")
             return standings
 
+        seen: set[Tuple[str, str, str]] = set()
         for entry in entries:
             info = _extract_team_info(entry)
             if not info:
@@ -567,6 +590,10 @@ def _parse_standings(data: Any) -> dict[str, dict[str, List[dict]]]:
             conference_bucket = standings[conference_name]
             division_bucket = conference_bucket.setdefault(division, [])
             order = info["rank"] if info["rank"] > 0 else len(division_bucket) + 1
+            key = (conference_name, division, info["abbr"])
+            if key in seen:
+                continue
+            seen.add(key)
             division_bucket.append(
                 {
                     "abbr": info["abbr"],
