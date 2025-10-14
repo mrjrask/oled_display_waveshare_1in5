@@ -79,6 +79,8 @@ _NBA_HEADERS = {
     "Origin": "https://www.nba.com",
     "Referer": "https://www.nba.com/",
 }
+_FORBIDDEN_CACHE_TTL = datetime.timedelta(minutes=30)
+_last_forbidden: Optional[datetime.datetime] = None
 
 _INTRO_LOGO_CACHE: Optional[Image.Image] = None
 _INTRO_LOGO_LOADED = False
@@ -592,9 +594,27 @@ def _map_game(game: Dict[str, Any]) -> Dict[str, Any]:
 
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
     def _load_json(url: str) -> Optional[Dict[str, Any]]:
+        global _last_forbidden
+
+        if _last_forbidden and (datetime.datetime.now() - _last_forbidden) < _FORBIDDEN_CACHE_TTL:
+            logging.debug(
+                "Skipping NBA scoreboard fetch for %s due to recent 403", url
+            )
+            return None
+
         try:
             response = _SESSION.get(url, timeout=REQUEST_TIMEOUT, headers=_NBA_HEADERS)
             if response.status_code == 404:
+                return None
+            if response.status_code == 403:
+                now = datetime.datetime.now()
+                if not _last_forbidden or (now - _last_forbidden) >= _FORBIDDEN_CACHE_TTL:
+                    logging.warning(
+                        "NBA scoreboard returned HTTP 403 for %s; suppressing further attempts for %s",
+                        url,
+                        _FORBIDDEN_CACHE_TTL,
+                    )
+                _last_forbidden = now
                 return None
             response.raise_for_status()
             return response.json()
