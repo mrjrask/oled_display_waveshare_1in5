@@ -199,28 +199,30 @@ TRAVEL_TO_HOME_ORIGIN = os.environ.get("TRAVEL_TO_HOME_ORIGIN", DEFAULT_WORK_ADD
 TRAVEL_TO_HOME_DESTINATION = os.environ.get(
     "TRAVEL_TO_HOME_DESTINATION", DEFAULT_HOME_ADDRESS
 )
-TRAVEL_TO_WORK_ORIGIN = os.environ.get("TRAVEL_TO_WORK_ORIGIN", DEFAULT_HOME_ADDRESS)
+TRAVEL_TO_WORK_ORIGIN = os.environ.get(
+    "TRAVEL_TO_WORK_ORIGIN", TRAVEL_TO_HOME_DESTINATION
+)
 TRAVEL_TO_WORK_DESTINATION = os.environ.get(
-    "TRAVEL_TO_WORK_DESTINATION", DEFAULT_WORK_ADDRESS
+    "TRAVEL_TO_WORK_DESTINATION", TRAVEL_TO_HOME_ORIGIN
 )
 
 TRAVEL_PROFILES = {
     "to_home": {
         "origin": TRAVEL_TO_HOME_ORIGIN,
         "destination": TRAVEL_TO_HOME_DESTINATION,
-        "title": "Travel Time to Home…",
+        "title": "To home:",
         "active_window": (datetime.time(14, 30), datetime.time(19, 0)),
     },
     "to_work": {
         "origin": TRAVEL_TO_WORK_ORIGIN,
         "destination": TRAVEL_TO_WORK_DESTINATION,
-        "title": "Travel Time to Work…",
+        "title": "To work:",
         "active_window": (datetime.time(6, 0), datetime.time(11, 0)),
     },
     "default": {
         "origin": TRAVEL_TO_HOME_ORIGIN,
         "destination": TRAVEL_TO_HOME_DESTINATION,
-        "title": "Travel Time…",
+        "title": "Travel time:",
         "active_window": (datetime.time(6, 0), datetime.time(19, 0)),
     },
 }

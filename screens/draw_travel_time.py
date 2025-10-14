@@ -280,7 +280,7 @@ TRAVEL_ICON_LSD = os.path.join(IMAGES_DIR, "travel", "lsd.png")
 TRAVEL_ICON_90 = os.path.join(IMAGES_DIR, "travel", "90.png")
 TRAVEL_ICON_94 = os.path.join(IMAGES_DIR, "travel", "94.png")
 TRAVEL_ICON_294 = os.path.join(IMAGES_DIR, "travel", "294.png")
-ROUTE_ICON_HEIGHT = 24
+ROUTE_ICON_HEIGHT = 18
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Composition
@@ -347,11 +347,12 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
 
     title_width, title_height = _measure(TRAVEL_TITLE, FONT_TITLE_SPORTS)
 
-    outer_margin = 6
-    row_padding = 12
-    row_gap = 10
-    header_gap = 6
-    row_height = max(max_sign_height, max_time_height) + 2 * row_padding
+    outer_margin = 4
+    row_padding_x = 10
+    row_padding_y = 4
+    row_gap = 4
+    header_gap = 4
+    row_height = max(max_sign_height, max_time_height) + 2 * row_padding_y
 
     all_na = all(row["normalized"].upper() == "N/A" for row in rows)
     warning_text = "Travel data unavailable · Check Google Directions API"
@@ -394,18 +395,18 @@ def _compose_travel_image(times: Dict[str, TravelTimeResult]) -> Image.Image:
 
         draw.rounded_rectangle(
             (row_left, row_top, row_right, row_bottom),
-            radius=12,
+            radius=10,
             fill=(28, 28, 28),
             outline=(80, 80, 80),
         )
 
-        sign_x = row_left + row_padding
+        sign_x = row_left + row_padding_x
         sign_y = row_top + (row_height - sign_image.height) // 2
         img.paste(sign_image, (sign_x, sign_y), sign_image)
 
         time_width = row["time_width"]
         time_height = row["time_height"]
-        time_x = row_right - row_padding - time_width
+        time_x = row_right - row_padding_x - time_width
         time_y = row_top + (row_height - time_height) // 2
         draw.text((time_x, time_y), normalized, font=time_font, fill=display_color)
 
