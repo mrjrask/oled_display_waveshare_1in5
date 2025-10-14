@@ -19,7 +19,7 @@ from config import (
     FONT_STATUS,
     IMAGES_DIR,
 )
-from http_client import get_session
+from services.http_client import get_session
 from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_call
 
 # ─── Constants ────────────────────────────────────────────────────────────────

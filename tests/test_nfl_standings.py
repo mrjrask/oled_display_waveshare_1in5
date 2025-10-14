@@ -1,6 +1,6 @@
 import pytest
 
-from nfl_standings import (
+from screens.nfl_standings import (
     CONFERENCE_AFC_KEY,
     CONFERENCE_NFC_KEY,
     _parse_standings,

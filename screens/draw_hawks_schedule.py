@@ -52,7 +52,7 @@ from config import (
     WIDTH,
     HEIGHT,
 )
-from http_client import NHL_HEADERS, get_session, request_json
+from services.http_client import NHL_HEADERS, get_session, request_json
 
 TS_PATH = TIMES_SQUARE_FONT_PATH
 NHL_DIR = NHL_IMAGES_DIR
@@ -70,7 +70,7 @@ def _ts(size: int) -> ImageFont.ImageFont:
 # Try to reuse MLB's helper functions for title layout and date labels.
 _MLB = None
 try:
-    import mlb_schedule as _MLB  # noqa: N816
+    import screens.mlb_schedule as _MLB  # noqa: N816
 except Exception:
     _MLB = None
 

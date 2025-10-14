@@ -37,7 +37,7 @@ from utils import (
     load_team_logo,
     log_call,
 )
-from http_client import NHL_HEADERS, get_session
+from services.http_client import NHL_HEADERS, get_session
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE               = "NHL Scoreboard"

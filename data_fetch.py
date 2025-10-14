@@ -12,8 +12,8 @@ import logging
 import pytz
 import requests
 
-from http_client import NHL_HEADERS, get_session
-from nba_scoreboard import _fetch_games_for_date as _nba_fetch_games_for_date
+from services.http_client import NHL_HEADERS, get_session
+from screens.nba_scoreboard import _fetch_games_for_date as _nba_fetch_games_for_date
 
 from config import (
     OWM_API_KEY,

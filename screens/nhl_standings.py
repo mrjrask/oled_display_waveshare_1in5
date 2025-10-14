@@ -19,7 +19,7 @@ from config import (
     FONT_STATUS,
     NHL_IMAGES_DIR,
 )
-from http_client import NHL_HEADERS, get_session
+from services.http_client import NHL_HEADERS, get_session
 from utils import ScreenImage, clear_display, clone_font, log_call
 
 # ─── Constants ────────────────────────────────────────────────────────────────
