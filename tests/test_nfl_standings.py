@@ -140,3 +140,64 @@ def test_parse_standings_handles_entries_by_group(grouped_payload):
 
     assert [team["abbr"] for team in nfc_north] == ["DET"]
     assert nfc_north[0]["wins"] == 12
+
+
+@pytest.fixture
+def scattered_payload():
+    return {
+        "some": {
+            "deeply": {
+                "nested": [
+                    {
+                        "misc": {
+                            "team": {
+                                "abbreviation": "BUF",
+                                "standingSummary": "1st in AFC East",
+                            },
+                            "stats": [
+                                {"name": "wins", "value": 13},
+                                {"name": "losses", "value": 4},
+                                {"name": "ties", "value": 0},
+                                {"name": "playoffSeed", "value": 1},
+                            ],
+                        },
+                    },
+                    {
+                        "team": {
+                            "abbreviation": "MIA",
+                            "standingSummary": "2nd in AFC East",
+                        },
+                        "stats": [
+                            {"name": "wins", "value": 11},
+                            {"name": "losses", "value": 6},
+                            {"name": "ties", "value": 0},
+                            {"name": "playoffSeed", "value": 5},
+                        ],
+                    },
+                    {
+                        "team": {
+                            "abbreviation": "PHI",
+                            "standingSummary": "1st in NFC East",
+                        },
+                        "stats": [
+                            {"name": "wins", "value": 12},
+                            {"name": "losses", "value": 5},
+                            {"name": "ties", "value": 0},
+                            {"name": "playoffSeed", "value": 2},
+                        ],
+                    },
+                ]
+            }
+        }
+    }
+
+
+def test_parse_standings_falls_back_to_scattered_entries(scattered_payload):
+    standings = _parse_standings(scattered_payload)
+
+    afc_east = standings[CONFERENCE_AFC_KEY]["AFC East"]
+    nfc_east = standings[CONFERENCE_NFC_KEY]["NFC East"]
+
+    assert [team["abbr"] for team in afc_east] == ["BUF", "MIA"]
+    assert afc_east[0]["wins"] == 13
+    assert nfc_east[0]["abbr"] == "PHI"
