@@ -96,6 +96,11 @@ MLB_API_URL        = "https://statsapi.mlb.com/api/v1/schedule"
 MLB_CUBS_TEAM_ID   = "112"
 MLB_SOX_TEAM_ID    = "145"
 
+NBA_TEAM_ID        = "1610612741"
+NBA_TEAM_TRICODE   = "CHI"
+NBA_IMAGES_DIR     = os.path.join(IMAGES_DIR, "nba")
+NBA_FALLBACK_LOGO  = os.path.join(NBA_IMAGES_DIR, "NBA.png")
+
 CENTRAL_TIME = pytz.timezone("America/Chicago")
 
 # ─── Fonts ────────────────────────────────────────────────────────────────────

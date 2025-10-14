@@ -64,6 +64,12 @@ from draw_travel_time    import (
     is_travel_screen_active,
 )
 from draw_bears_schedule import show_bears_next_game
+from draw_bulls_schedule import (
+    draw_last_bulls_game,
+    draw_live_bulls_game,
+    draw_sports_screen_bulls,
+    draw_bulls_next_home_game,
+)
 from draw_hawks_schedule import (
     draw_last_hawks_game,
     draw_live_hawks_game,
@@ -331,6 +337,7 @@ def load_logo(fn, height=80):
 
 cubs_logo   = load_logo("cubs.jpg")
 hawks_logo  = load_logo("hawks.jpg")
+bulls_logo  = load_logo("nba/CHI.png")
 sox_logo    = load_logo("sox.jpg")
 weather_img = load_logo("weather.jpg")
 mlb_logo    = load_logo("mlb.jpg")
@@ -344,6 +351,7 @@ bears_logo  = load_logo("bears.png")
 cache = {
     "weather": None,
     "hawks":   {"last":None, "live":None, "next":None, "next_home":None},
+    "bulls":   {"last":None, "live":None, "next":None, "next_home":None},
     "cubs":    {"stand":None, "last":None, "live":None, "next":None, "next_home":None},
     "sox":     {"stand":None, "last":None, "live":None, "next":None, "next_home":None},
 }
@@ -356,6 +364,12 @@ def refresh_all():
         "live": data_fetch.fetch_blackhawks_live_game(),
         "next": data_fetch.fetch_blackhawks_next_game(),
         "next_home": data_fetch.fetch_blackhawks_next_home_game(),
+    })
+    cache["bulls"].update({
+        "last": data_fetch.fetch_bulls_last_game(),
+        "live": data_fetch.fetch_bulls_live_game(),
+        "next": data_fetch.fetch_bulls_next_game(),
+        "next_home": data_fetch.fetch_bulls_next_home_game(),
     })
     cubg = data_fetch.fetch_cubs_games() or {}
     cache["cubs"].update({
@@ -566,6 +580,30 @@ def build_screens():
         ("AL West",      lambda: draw_AL_West(display, transition=True)),
         ("AL Wild Card", lambda: draw_AL_WildCard(display, transition=True)),
     ]
+
+    if any(cache["bulls"].values()):
+        bulls_next = cache["bulls"].get("next")
+        bulls_next_home = cache["bulls"].get("next_home")
+        if _games_match(bulls_next_home, bulls_next):
+            bulls_next_home = None
+
+        screens += [
+            ("bulls logo", (lambda: show_logo(bulls_logo)) if bulls_logo else None),
+            ("bulls last", lambda: draw_last_bulls_game(display, cache["bulls"]["last"], transition=True)),
+            ("bulls live", lambda: draw_live_bulls_game(display, cache["bulls"]["live"], transition=True)),
+            ("bulls next", lambda: draw_sports_screen_bulls(display, bulls_next, transition=True)),
+            (
+                "bulls next home",
+                (
+                    lambda: draw_bulls_next_home_game(
+                        display,
+                        bulls_next_home,
+                        transition=True,
+                    )
+                ) if bulls_next_home else None,
+            ),
+        ]
+
     return [s for s in screens if s]
 
 # ─── Main loop ───────────────────────────────────────────────────────────────
