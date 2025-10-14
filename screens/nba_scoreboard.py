@@ -81,6 +81,7 @@ _NBA_HEADERS = {
 }
 _FORBIDDEN_CACHE_TTL = datetime.timedelta(minutes=30)
 _last_forbidden: Optional[datetime.datetime] = None
+_espn_fallback_notice_at: Optional[datetime.datetime] = None
 
 _INTRO_LOGO_CACHE: Optional[Image.Image] = None
 _INTRO_LOGO_LOADED = False
@@ -768,10 +769,33 @@ def _fetch_games_from_espn(day: datetime.date) -> list[dict]:
         if mapped:
             raw_games.append(mapped)
 
-    if raw_games:
-        logging.info("Using ESPN NBA scoreboard fallback for %s", day)
     mapped_games = [_map_game(game) for game in raw_games]
     return _hydrate_games(mapped_games)
+
+
+def _log_espn_fallback(day: datetime.date) -> None:
+    """Log a single fallback notice within the forbidden cache window."""
+
+    global _espn_fallback_notice_at
+
+    now = datetime.datetime.now()
+    if (
+        _espn_fallback_notice_at is None
+        or (now - _espn_fallback_notice_at) >= _FORBIDDEN_CACHE_TTL
+    ):
+        logging.info(
+            "Using ESPN NBA scoreboard fallback while NBA data is unavailable (first encountered for %s)",
+            day,
+        )
+        _espn_fallback_notice_at = now
+
+
+def _reset_espn_fallback_notice() -> None:
+    """Reset the fallback notice cache so it can be emitted again later."""
+
+    global _espn_fallback_notice_at
+
+    _espn_fallback_notice_at = None
 
 
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
@@ -813,8 +837,10 @@ def _fetch_games_for_date(day: datetime.date) -> list[dict]:
         data = _load_json(today_url)
 
     if not isinstance(data, dict):
+        _log_espn_fallback(day)
         return _fetch_games_from_espn(day)
 
+    _reset_espn_fallback_notice()
     games_raw: Iterable[dict] = []
     if isinstance(data.get("scoreboard"), dict):
         games_raw = data["scoreboard"].get("games") or []
