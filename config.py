@@ -136,7 +136,7 @@ FONT_TITLE_INSIDE       = _load_font("DejaVuSans-Bold.ttf", 9)
 
 FONT_TRAVEL_TITLE       = _load_font("TimesSquare-m105.ttf", 9)
 FONT_TRAVEL_HEADER      = _load_font("TimesSquare-m105.ttf", 9)
-FONT_TRAVEL_VALUE       = _load_font("TimesSquare-m105.ttf",10)
+FONT_TRAVEL_VALUE       = _load_font("HWYGNRRW.TTF", 14)
 
 FONT_IP_LABEL           = FONT_INSIDE_LABEL
 FONT_IP_VALUE           = FONT_INSIDE_VALUE
