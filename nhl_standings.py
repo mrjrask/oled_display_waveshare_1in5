@@ -17,7 +17,7 @@ from config import (
     HEIGHT,
     FONT_TITLE_SPORTS,
     FONT_STATUS,
-    IMAGES_DIR,
+    NHL_IMAGES_DIR,
 )
 from http_client import NHL_HEADERS, get_session
 from utils import ScreenImage, clear_display, clone_font, log_call
@@ -34,7 +34,7 @@ CACHE_TTL = 15 * 60  # seconds
 CONFERENCE_WEST_KEY = "Western"
 CONFERENCE_EAST_KEY = "Eastern"
 
-LOGO_DIR = os.path.join(IMAGES_DIR, "NHL")
+LOGO_DIR = NHL_IMAGES_DIR
 LOGO_HEIGHT = 20
 LEFT_MARGIN = 4
 ROW_PADDING = 2
@@ -84,7 +84,7 @@ COLUMN_HEADERS = [
     ("", "team", "left"),
     ("W", "wins", "right"),
     ("L", "losses", "right"),
-    ("OTL", "ot", "right"),
+    ("O", "ot", "right"),
     ("PTS", "points", "right"),
 ]
 
