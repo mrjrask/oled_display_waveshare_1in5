@@ -56,7 +56,7 @@ COLUMN_FONT = clone_font(FONT_STATUS, 13)
 COLUMN_FONT_POINTS = clone_font(FONT_STATUS, 9)
 ROW_FONT = clone_font(FONT_STATUS, 14)
 
-OVERVIEW_TITLE = "NHL Standings Overview"
+OVERVIEW_TITLE = "NHL Overview"
 OVERVIEW_DIVISIONS = [
     (CONFERENCE_EAST_KEY, "Metropolitan", "Metro"),
     (CONFERENCE_EAST_KEY, "Atlantic", "Atlantic"),
