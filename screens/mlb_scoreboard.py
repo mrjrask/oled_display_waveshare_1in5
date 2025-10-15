@@ -166,6 +166,10 @@ def _format_status(game: dict) -> str:
 
     if "postponed" in detailed_lower:
         return "Postponed"
+    if detailed_lower == "warmup":
+        return "Warmup"
+    if detailed_lower == "delayed":
+        return "Delayed"
     if "suspended" in detailed_lower:
         return detailed
 
