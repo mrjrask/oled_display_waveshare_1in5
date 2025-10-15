@@ -138,7 +138,7 @@ def index() -> str:
     template = "admin.html" if use_playlist_ui else "admin_legacy.html"
     return render_template(
         template,
-        bootstrap=json.dumps(payload),
+        bootstrap=payload,
         config_json=json.dumps(payload["config"], indent=2),
     )
 
