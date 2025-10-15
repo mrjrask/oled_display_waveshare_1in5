@@ -55,6 +55,22 @@ DIVISION_FONT = clone_font(FONT_TITLE_SPORTS, 14)
 COLUMN_FONT = clone_font(FONT_STATUS, 13)
 COLUMN_FONT_POINTS = clone_font(FONT_STATUS, 9)
 ROW_FONT = clone_font(FONT_STATUS, 14)
+OVERVIEW_LABEL_FONT = clone_font(FONT_STATUS, 10)
+
+OVERVIEW_TITLE = "NHL Standings Overview"
+OVERVIEW_DIVISIONS = [
+    (CONFERENCE_EAST_KEY, "Metropolitan", "Metro"),
+    (CONFERENCE_EAST_KEY, "Atlantic", "Atlantic"),
+    (CONFERENCE_WEST_KEY, "Central", "Central"),
+    (CONFERENCE_WEST_KEY, "Pacific", "Pacific"),
+]
+OVERVIEW_MARGIN_X = 4
+OVERVIEW_TITLE_MARGIN_BOTTOM = 4
+OVERVIEW_LABEL_GAP = 2
+OVERVIEW_BOTTOM_MARGIN = 2
+OVERVIEW_MAX_LOGO_HEIGHT = 24
+OVERVIEW_LOGO_PADDING = 2
+
 
 WHITE = (255, 255, 255)
 
@@ -65,6 +81,7 @@ _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
 _STANDINGS_CACHE: dict[str, object] = {"timestamp": 0.0, "data": None}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
+_OVERVIEW_LOGO_CACHE: dict[tuple[str, int], Optional[Image.Image]] = {}
 
 STATSAPI_HOST = "statsapi.web.nhl.com"
 _DNS_RETRY_INTERVAL = 600  # seconds
@@ -129,6 +146,27 @@ def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
 
     _LOGO_CACHE[cache_key] = None
     return None
+
+
+def _load_overview_logo(abbr: str, height: int) -> Optional[Image.Image]:
+    abbr_key = (abbr or "").strip().upper()
+    if not abbr_key or height <= 0:
+        return None
+
+    cache_key = (abbr_key, height)
+    if cache_key in _OVERVIEW_LOGO_CACHE:
+        return _OVERVIEW_LOGO_CACHE[cache_key]
+
+    try:
+        from utils import load_team_logo
+
+        logo = load_team_logo(LOGO_DIR, abbr_key, height=height)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logging.debug("NHL overview logo load failed for %s@%s: %s", abbr_key, height, exc)
+        logo = None
+
+    _OVERVIEW_LOGO_CACHE[cache_key] = logo
+    return logo
 
 
 def _load_logo(abbr: str) -> Optional[Image.Image]:
@@ -657,6 +695,54 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
     return img
 
 
+def _render_overview(divisions: List[tuple[str, List[dict]]]) -> Image.Image:
+    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    draw = ImageDraw.Draw(img)
+
+    y = TITLE_MARGIN_TOP
+    y += _draw_centered_text(draw, OVERVIEW_TITLE, TITLE_FONT, y)
+    y += OVERVIEW_TITLE_MARGIN_BOTTOM
+
+    label_height = _text_size("Metro", OVERVIEW_LABEL_FONT)[1]
+    logos_top = y + label_height + OVERVIEW_LABEL_GAP
+    available_height = max(0, HEIGHT - logos_top - OVERVIEW_BOTTOM_MARGIN)
+
+    max_rows = max((len(teams) for _, teams in divisions), default=0)
+    if max_rows <= 0:
+        max_rows = 1
+
+    col_count = max(1, len(divisions))
+    available_width = max(1.0, WIDTH - 2 * OVERVIEW_MARGIN_X)
+    col_width = available_width / col_count
+    cell_height = available_height / max_rows if max_rows else available_height
+
+    logo_from_height = max(6, int(cell_height) - OVERVIEW_LOGO_PADDING)
+    logo_from_width = max(6, int(col_width) - OVERVIEW_LOGO_PADDING)
+    logo_target_height = max(6, min(OVERVIEW_MAX_LOGO_HEIGHT, logo_from_height, logo_from_width))
+
+    for idx, (label, teams) in enumerate(divisions):
+        col_left = OVERVIEW_MARGIN_X + idx * col_width
+        col_center = col_left + col_width / 2
+
+        lw, lh = _text_size(label, OVERVIEW_LABEL_FONT)
+        label_y = y + (label_height - lh) // 2 if label_height > 0 else y
+        draw.text((int(col_center - lw / 2), int(label_y)), label, font=OVERVIEW_LABEL_FONT, fill=WHITE)
+
+        for row in range(max_rows):
+            y_center = logos_top + cell_height * (row + 0.5)
+            logo = None
+            if row < len(teams):
+                abbr = teams[row].get("abbr") or ""
+                logo = _load_overview_logo(abbr, logo_target_height)
+            if not logo:
+                continue
+            x = int(col_center - logo.width / 2)
+            y0 = int(y_center - logo.height / 2)
+            img.paste(logo, (x, y0), logo)
+
+    return img
+
+
 def _render_empty(title: str) -> Image.Image:
     img = Image.new("RGB", (WIDTH, HEIGHT), "black")
     draw = ImageDraw.Draw(img)
@@ -684,6 +770,30 @@ def _scroll_vertical(display, image: Image.Image) -> None:
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
+@log_call
+def draw_nhl_standings_overview(display, transition: bool = False) -> ScreenImage:
+    standings_by_conf = _fetch_standings_data()
+
+    divisions: List[tuple[str, List[dict]]] = []
+    for conference_key, division_name, label in OVERVIEW_DIVISIONS:
+        conference = standings_by_conf.get(conference_key, {})
+        teams = conference.get(division_name, [])
+        divisions.append((label, teams))
+
+    if not any(teams for _, teams in divisions):
+        clear_display(display)
+        img = _render_empty(OVERVIEW_TITLE)
+        if transition:
+            return ScreenImage(img, displayed=False)
+        display.image(img)
+        return ScreenImage(img, displayed=True)
+
+    img = _render_overview(divisions)
+    clear_display(display)
+    display.image(img)
+    return ScreenImage(img, displayed=True)
+
+
 @log_call
 def draw_nhl_standings_west(display, transition: bool = False) -> ScreenImage:
     standings_by_conf = _fetch_standings_data()

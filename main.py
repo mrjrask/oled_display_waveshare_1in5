@@ -104,6 +104,7 @@ from screens.nba_scoreboard import draw_nba_scoreboard
 from screens.nhl_scoreboard import draw_nhl_scoreboard
 from screens.nhl_standings import (
     draw_nhl_standings_east,
+    draw_nhl_standings_overview,
     draw_nhl_standings_west,
 )
 from screens.nfl_scoreboard import draw_nfl_scoreboard
@@ -524,7 +525,7 @@ def build_screens():
         if _games_match(hawks_next_home, hawks_next):
             hawks_next_home = None
 
-        screens += [
+        hawks_screens = [
             ("hawks logo", (lambda: show_logo(hawks_logo)) if hawks_logo else None),
             ("hawks last", lambda: draw_last_hawks_game(display, cache["hawks"]["last"], transition=True)),
             ("hawks live", lambda: draw_live_hawks_game(display, cache["hawks"]["live"], transition=True)),
@@ -539,8 +540,15 @@ def build_screens():
                     )
                 ) if hawks_next_home else None,
             ),
-            ("nhl logo",   (lambda: show_logo(nhl_logo)) if nhl_logo else None),
+        ]
+
+        nhl_screens = [
+            ("nhl logo", (lambda: show_logo(nhl_logo)) if nhl_logo else None),
             ("NHL Scoreboard", lambda: draw_nhl_scoreboard(display, transition=True)),
+            (
+                "NHL Standings Overview",
+                lambda: draw_nhl_standings_overview(display, transition=True),
+            ),
             (
                 "NHL Standings West",
                 lambda: draw_nhl_standings_west(display, transition=True),
@@ -550,7 +558,9 @@ def build_screens():
                 lambda: draw_nhl_standings_east(display, transition=True),
             ),
         ]
-        screens = [s for s in screens if s]
+
+        screens.extend([s for s in hawks_screens if s])
+        screens.extend([s for s in nhl_screens if s])
 
     if any(cache["cubs"].values()):
         cubs_next = cache["cubs"].get("next")
