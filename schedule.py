@@ -37,14 +37,15 @@ class ScreenNode(ScheduleNode):
 
 
 class EveryNode(ScheduleNode):
-    def __init__(self, child: ScheduleNode, frequency: int) -> None:
+    def __init__(self, child: ScheduleNode, frequency: int, phase: int = 0) -> None:
         self.child = child
         self.frequency = max(1, frequency)
+        self.phase = phase % self.frequency if self.frequency else 0
         self._tick = 0
 
     def next(self, registry: Dict[str, ScreenDefinition]) -> Optional[str]:
         result: Optional[str] = None
-        if self._tick == 0:
+        if self._tick == self.phase:
             result = self.child.next(registry)
         self._tick = (self._tick + 1) % self.frequency
         return result
@@ -423,10 +424,23 @@ class _ScheduleParser:
             item = rule_data.get("item") or rule_data.get("screen")
             if item is None:
                 raise ValueError("every rule requires an item")
+            phase_raw = rule_data.get("phase")
+            offset_raw = rule_data.get("offset") if phase_raw is None else None
+            phase_value = 0
+            if phase_raw is not None:
+                try:
+                    phase_value = int(phase_raw)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("every rule phase must be an integer") from exc
+            elif offset_raw is not None:
+                try:
+                    phase_value = int(offset_raw)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("every rule offset must be an integer") from exc
             child_nodes, child_ids = self._parse_step(item, ancestry)
             if len(child_nodes) != 1:
                 raise ValueError("every rule item must resolve to a single node")
-            return [EveryNode(child_nodes[0], frequency)], child_ids
+            return [EveryNode(child_nodes[0], frequency, phase=phase_value)], child_ids
 
         raise ValueError(f"Unsupported rule descriptor: {rule_data!r}")
 

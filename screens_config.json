@@ -1,264 +1,215 @@
 {
+  "version": 2,
   "catalog": {
     "presets": {}
   },
   "metadata": {
-    "migrated_from": 1,
-    "source": "/workspace/oled_display_waveshare_1in5/screens_config.json"
+    "label": "Default screen playlist"
   },
   "playlists": {
-    "main": {
-      "label": "Migrated sequence",
+    "default": {
+      "label": "Default loop",
       "steps": [
         {
           "screen": "date"
         },
         {
-          "screen": "time"
+          "screen": "weather1"
         },
         {
           "rule": {
-            "items": [
-              {
-                "screen": "weather logo"
-              },
-              {
-                "screen": "weather1"
-              },
-              {
-                "screen": "weather2"
-              }
-            ],
-            "type": "cycle"
-          }
-        },
-        {
-          "screen": "inside"
-        },
-        {
-          "rule": {
-            "options": [
-              "travel",
-              "verano logo"
-            ],
-            "type": "variants"
-          }
-        },
-        {
-          "screen": "vrnof"
-        },
-        {
-          "screen": "bears logo"
-        },
-        {
-          "screen": "bears next"
-        },
-        {
-          "screen": "nfl logo"
-        },
-        {
-          "rule": {
-            "items": [
-              {
-                "screen": "NFL Overview NFC"
-              },
-              {
-                "screen": "NFL Overview AFC"
-              },
-              {
-                "screen": "NFL Standings NFC"
-              },
-              {
-                "screen": "NFL Standings AFC"
-              }
-            ],
-            "type": "cycle"
-          }
-        },
-        {
-          "screen": "NFL Scoreboard"
-        },
-        {
-          "rule": {
-            "items": [
-              {
-                "screen": "hawks logo"
-              },
-              {
-                "screen": "hawks last"
-              },
-              {
-                "screen": "hawks live"
-              },
-              {
-                "screen": "hawks next"
-              },
-              {
-                "screen": "hawks next home"
-              }
-            ],
-            "type": "cycle"
+            "type": "every",
+            "frequency": 3,
+            "item": {
+              "screen": "weather2"
+            }
           }
         },
         {
           "rule": {
-            "options": [
-              "nhl logo",
-              "NHL Scoreboard"
-            ],
-            "type": "variants"
+            "type": "every",
+            "frequency": 3,
+            "item": {
+              "screen": "inside"
+            }
+          }
+        },
+        {
+          "screen": "travel"
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 4,
+            "item": {
+              "screen": "vrnof"
+            }
           }
         },
         {
           "rule": {
-            "items": [
-              {
-                "screen": "cubs logo"
-              },
-              {
-                "screen": "cubs stand1"
-              },
-              {
-                "screen": "cubs stand2"
-              },
-              {
-                "screen": "cubs last"
-              },
-              {
-                "screen": "cubs result"
-              },
-              {
-                "screen": "cubs live"
-              },
-              {
-                "screen": "cubs next"
-              },
-              {
-                "screen": "cubs next home"
-              }
-            ],
-            "type": "cycle"
-          }
-        },
-        {
-          "rule": {
-            "items": [
-              {
-                "screen": "sox logo"
-              },
-              {
-                "screen": "sox stand1"
-              },
-              {
-                "screen": "sox stand2"
-              },
-              {
-                "screen": "sox last"
-              },
-              {
-                "screen": "sox live"
-              },
-              {
-                "screen": "sox next"
-              },
-              {
-                "screen": "sox next home"
-              }
-            ],
-            "type": "cycle"
-          }
-        },
-        {
-          "rule": {
+            "type": "every",
             "frequency": 2,
             "item": {
+              "rule": {
+                "type": "cycle",
+                "items": [
+                  {
+                    "screen": "hawks logo"
+                  },
+                  {
+                    "screen": "hawks last"
+                  },
+                  {
+                    "screen": "hawks live"
+                  },
+                  {
+                    "screen": "hawks next"
+                  },
+                  {
+                    "screen": "hawks next home"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 5,
+            "item": {
+              "screen": "NHL Scoreboard"
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 6,
+            "item": {
+              "rule": {
+                "type": "cycle",
+                "items": [
+                  {
+                    "screen": "NHL Standings Overview"
+                  },
+                  {
+                    "screen": "NHL Standings Overview"
+                  },
+                  {
+                    "screen": "NHL Standings West"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 18,
+            "phase": 12,
+            "item": {
+              "screen": "NHL Standings East"
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 4,
+            "item": {
+              "screen": "bears logo"
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 4,
+            "item": {
+              "screen": "bears next"
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 5,
+            "item": {
+              "screen": "NFL Scoreboard"
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 6,
+            "item": {
+              "rule": {
+                "type": "cycle",
+                "items": [
+                  {
+                    "screen": "NFL Overview NFC"
+                  },
+                  {
+                    "screen": "NFL Overview NFC"
+                  },
+                  {
+                    "screen": "NFL Standings NFC"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 6,
+            "item": {
+              "rule": {
+                "type": "cycle",
+                "items": [
+                  {
+                    "screen": "NFL Overview AFC"
+                  },
+                  {
+                    "screen": "NFL Overview AFC"
+                  },
+                  {
+                    "screen": "NFL Standings AFC"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 7,
+            "item": {
+              "screen": "NBA Scoreboard"
+            }
+          }
+        },
+        {
+          "rule": {
+            "type": "every",
+            "frequency": 3,
+            "item": {
               "screen": "MLB Scoreboard"
-            },
-            "type": "every"
+            }
           }
-        },
-        {
-          "rule": {
-            "items": [
-              {
-                "screen": "NL Overview"
-              },
-              {
-                "screen": "NL East"
-              },
-              {
-                "screen": "NL Central"
-              },
-              {
-                "screen": "NL West"
-              },
-              {
-                "screen": "NL Wild Card"
-              }
-            ],
-            "type": "cycle"
-          }
-        },
-        {
-          "rule": {
-            "items": [
-              {
-                "screen": "AL Overview"
-              },
-              {
-                "screen": "AL East"
-              },
-              {
-                "screen": "AL Central"
-              },
-              {
-                "screen": "AL West"
-              },
-              {
-                "screen": "AL Wild Card"
-              }
-            ],
-            "type": "cycle"
-          }
-        },
-        {
-          "rule": {
-            "options": [
-              "bulls live",
-              "bulls last"
-            ],
-            "type": "variants"
-          }
-        },
-        {
-          "rule": {
-            "items": [
-              {
-                "screen": "bulls logo"
-              },
-              {
-                "screen": "bulls next"
-              },
-              {
-                "screen": "bulls next home"
-              }
-            ],
-            "type": "cycle"
-          }
-        },
-        {
-          "screen": "nba logo"
-        },
-        {
-          "screen": "NBA Scoreboard"
         }
       ]
     }
   },
   "sequence": [
     {
-      "playlist": "main"
+      "playlist": "default"
     }
-  ],
-  "version": 2
+  ]
 }
