@@ -62,6 +62,14 @@ LEAGUE_LOGO_KEYS   = ("NFL", "nfl")
 LEAGUE_LOGO_GAP    = 4
 LEAGUE_LOGO_HEIGHT = max(1, int(round(LOGO_HEIGHT * 1.25)))
 
+IN_GAME_STATUS_OVERRIDES = {
+    "end of the 1st": "End of the 1st",
+    "end of 1st": "End of the 1st",
+    "halftime": "Halftime",
+    "end of the 3rd": "End of the 3rd",
+    "end of 3rd": "End of the 3rd",
+}
+
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _LEAGUE_LOGO: Optional[Image.Image] = None
 _LEAGUE_LOGO_LOADED = False
@@ -160,9 +168,22 @@ def _format_status(game: dict) -> str:
     detail = (type_info.get("detail") or "").strip()
     state = (type_info.get("state") or "").lower()
 
+    def _override_in_game_status() -> Optional[str]:
+        for candidate in (short_detail, detail):
+            normalized = (candidate or "").strip()
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in IN_GAME_STATUS_OVERRIDES:
+                return IN_GAME_STATUS_OVERRIDES[key]
+        return None
+
     if state == "post":
         return short_detail or detail or "Final"
     if state == "in":
+        override = _override_in_game_status()
+        if override:
+            return override
         clock = status.get("displayClock") or ""
         period = status.get("period")
         if clock and period:
