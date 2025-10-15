@@ -22,10 +22,12 @@ fi
 # 2) Archive any straggler screenshots/videos left behind
 SCREENSHOTS_DIR="screenshots"
 ARCHIVE_BASE="screenshot_archive"   # singular, to match main.py
+ARCHIVE_DATED_DIR="${ARCHIVE_BASE}/dated_folders"
+ARCHIVE_DEFAULT_FOLDER="Screens"
 timestamp="$(date +%Y%m%d_%H%M%S)"
 day="${timestamp%_*}"
 batch="${timestamp#*_}"
-target_dir="${ARCHIVE_BASE}/${day}/cleanup_${batch}"
+target_dir="${ARCHIVE_DATED_DIR}/${ARCHIVE_DEFAULT_FOLDER}/${day}/cleanup_${batch}"
 
 shopt -s nullglob
 left_png=( "${SCREENSHOTS_DIR}"/*.png "${SCREENSHOTS_DIR}"/*.jpg "${SCREENSHOTS_DIR}"/*.jpeg )
