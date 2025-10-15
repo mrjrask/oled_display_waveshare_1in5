@@ -6,8 +6,72 @@ import glob
 import logging
 import os
 import subprocess
+from pathlib import Path
 
 # ─── Environment helpers ───────────────────────────────────────────────────────
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_env_file(path: str) -> None:
+    """Load simple KEY=VALUE pairs from *path* without overriding existing vars."""
+
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except FileNotFoundError:
+        return
+    except OSError:
+        logging.debug("Could not read .env file at %s", path)
+        return
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            continue
+
+        if value and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+
+        os.environ.setdefault(key, value)
+
+
+def _initialise_env() -> None:
+    """Load environment variables from `.env` if present."""
+
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except ImportError:
+        load_dotenv = None
+
+    candidate_paths = []
+
+    project_root = Path(SCRIPT_DIR)
+    candidate_paths.append(project_root / ".env")
+
+    cwd_path = Path.cwd() / ".env"
+    if cwd_path != candidate_paths[0]:
+        candidate_paths.append(cwd_path)
+
+    for path in candidate_paths:
+        if not path.is_file():
+            continue
+        if load_dotenv is not None:
+            load_dotenv(path, override=False)
+        else:
+            _load_env_file(str(path))
+
+
+_initialise_env()
 
 
 def _get_first_env_var(*names: str):
@@ -36,7 +100,6 @@ import pytz
 from PIL import ImageFont
 
 # ─── Project paths ────────────────────────────────────────────────────────────
-SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 IMAGES_DIR  = os.path.join(SCRIPT_DIR, "images")
 
 # ─── Feature flags ────────────────────────────────────────────────────────────
