@@ -5,180 +5,795 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>OLED Admin</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 800px; margin: 1rem auto; line-height: 1.4; }
-    h1 { font-size: 1.2rem; margin: 1rem 0 0.5rem; }
-
-    /* Multi-column grid for screen selectors */
-    .screens-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 0.6rem 1rem;
-      margin-bottom: 1rem;
+    :root {
+      color-scheme: light dark;
     }
-    .screen-card {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 0.4rem;
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 960px;
+      margin: 1.5rem auto;
+      line-height: 1.5;
+      padding: 0 1rem 3rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin: 1rem 0 0.5rem;
+    }
+    p.description {
+      margin-top: 0.25rem;
+      color: #555;
+      font-size: 0.95rem;
+    }
+    .sequence-header {
+      display: flex;
       align-items: center;
-      font-size: 0.9rem;
-      background: #f5f5f5;
-      padding: 0.5rem 0.6rem;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .add-buttons {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    button, select, input, textarea {
+      font: inherit;
+    }
+    button {
+      padding: 0.45rem 0.9rem;
       border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
       transition: background 0.2s ease;
     }
-    .screen-card.disabled {
-      background: #f0f0f0;
-      color: #666;
+    button.secondary {
+      background: #475569;
     }
-    .screen-card strong {
-      grid-column: 1 / span 2;
-      font-size: 0.95rem;
-    }
-    .screen-card select {
-      justify-self: start;
-      font-size: 0.85rem;
-      padding: 0.2rem 0.4rem;
-    }
-    .screen-card img.thumb {
-      width: 40px;
-      height: 40px;
-      object-fit: cover;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-
-    /* Logs layout */
-    #logs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-    .log-panel {
-      flex: 1 1 300px;
-      max-width: 45%;
-    }
-    .log-panel strong {
-      display: block;
-      margin-bottom: 0.3rem;
-      font-size: 0.95rem;
-    }
-    .log-panel pre {
-      height: 200px;
-      overflow: auto;
-      background: #f9f9f9;
-      border: 1px solid #ccc;
-      padding: 0.5rem;
-      font-size: 0.8rem;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-
-    button {
-      padding: 0.5rem 1rem;
-      font-size: 0.9rem;
-      cursor: pointer;
-      border: none;
-      background: #007bff;
-      color: white;
-      border-radius: 4px;
+    button.danger {
+      background: #b91c1c;
     }
     button:hover {
-      background: #0056b3;
+      background: #1d4ed8;
+    }
+    button.secondary:hover {
+      background: #334155;
+    }
+    button.danger:hover {
+      background: #991b1b;
+    }
+    button[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .sequence-list {
+      list-style: none;
+      margin: 1rem 0 1.5rem;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .sequence-item {
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 0.9rem 1rem;
+      background: #f9fafb;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.75rem 1rem;
+      align-items: start;
+      position: relative;
+    }
+    .sequence-item.dragging {
+      opacity: 0.6;
+    }
+    .drag-handle {
+      cursor: grab;
+      user-select: none;
+      font-size: 1.5rem;
+      line-height: 1;
+      color: #6b7280;
+      padding-right: 0.25rem;
+    }
+    .item-main {
+      display: grid;
+      gap: 0.6rem;
+    }
+    .item-top-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .item-type {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .item-type select {
+      min-width: 140px;
+    }
+    .summary {
+      font-weight: 600;
+    }
+    .item-controls {
+      display: grid;
+      gap: 0.6rem;
+    }
+    textarea {
+      min-height: 80px;
+      padding: 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #cbd5f5;
+      resize: vertical;
+      background: white;
+    }
+    .field-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    .field-row label {
+      font-weight: 600;
+    }
+    .field-row input, .field-row select {
+      padding: 0.35rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #cbd5f5;
+      background: white;
+      min-width: 140px;
+    }
+    .thumbnail {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid #e5e7eb;
+      background: #e5e7eb;
+    }
+    .item-footer {
+      display: flex;
+      justify-content: flex-end;
+    }
+    #status {
+      min-height: 1.25rem;
+      font-weight: 600;
+    }
+    #status.error {
+      color: #b91c1c;
+    }
+    #status.success {
+      color: #166534;
+    }
+    .logs {
+      margin-top: 3rem;
+    }
+    .log-panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .log-panel pre {
+      background: #111827;
+      color: #e5e7eb;
+      padding: 0.75rem;
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 640px) {
+      .sequence-item {
+        grid-template-columns: 1fr;
+      }
+      .drag-handle {
+        display: none;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>OLED Screens Configuration</h1>
-  <form id="screens-form">
-    <div class="screens-grid">
-      {% for key, freq in screens %}
-      <div class="screen-card{% if not freq %} disabled{% endif %}" data-screen="{{ key }}">
-        <strong>{{ key }}</strong>
-        <select name="screens[{{ key }}]" data-default="{{ freq }}">
-          <option value="0" {% if freq == 0 %}selected{% endif %}>Disabled</option>
-          <option value="1" {% if freq == 1 %}selected{% endif %}>Every loop</option>
-          <option value="2" {% if freq == 2 %}selected{% endif %}>Every 2 loops</option>
-          <option value="3" {% if freq == 3 %}selected{% endif %}>Every 3 loops</option>
-          <option value="4" {% if freq == 4 %}selected{% endif %}>Every 4 loops</option>
-          <option value="5" {% if freq == 5 %}selected{% endif %}>Every 5 loops</option>
-          <option value="6" {% if freq == 6 %}selected{% endif %}>Every 6 loops</option>
-          <option value="8" {% if freq == 8 %}selected{% endif %}>Every 8 loops</option>
-          <option value="10" {% if freq == 10 %}selected{% endif %}>Every 10 loops</option>
-        </select>
-        <img id="thumb-{{ key.replace(' ', '_') }}" class="thumb" alt="">
-      </div>
-      {% endfor %}
-    </div>
-    <button type="submit">Save</button>
-  </form>
+  <h1>OLED Screens Schedule</h1>
+  <p class="description">Drag entries to reorder the playback sequence. Use the editors to adjust cycle contents, variant fallbacks, or frequency rules.</p>
 
-  <h1>Logs</h1>
-  <div id="logs">
-    <div class="log-panel">
-      <strong>Display Service</strong>
-      <pre id="log-Display">Loading…</pre>
+  <div class="sequence-header">
+    <div class="add-buttons">
+      <button type="button" id="add-screen">Add screen</button>
+      <button type="button" id="add-cycle" class="secondary">Add cycle</button>
+      <button type="button" id="add-variants" class="secondary">Add variants</button>
+      <button type="button" id="add-every" class="secondary">Add frequency rule</button>
     </div>
-    <div class="log-panel">
-      <strong>Admin Service</strong>
-      <pre id="log-Admin">Loading…</pre>
-    </div>
+    <button type="button" id="save-button">Save schedule</button>
   </div>
 
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <ul id="sequence-list" class="sequence-list" aria-label="Screen sequence"></ul>
+
+  <section class="logs">
+    <h1>Service Logs</h1>
+    <div class="log-panels">
+      <div class="log-panel">
+        <strong>Display Service</strong>
+        <pre id="log-Display">Loading…</pre>
+      </div>
+      <div class="log-panel">
+        <strong>Admin Service</strong>
+        <pre id="log-Admin">Loading…</pre>
+      </div>
+    </div>
+  </section>
+
   <script>
-    // Load thumbnails
-    function updateCardState(card) {
-      const select = card.querySelector('select');
-      if (!select) return;
-      card.classList.toggle('disabled', parseInt(select.value, 10) === 0);
+    const INITIAL_CONFIG = {{ config_json | safe }};
+    const KNOWN_SCREEN_LIST = {{ known_screens | safe }};
+    const KNOWN_SCREEN_SET = new Set(KNOWN_SCREEN_LIST);
+    const HAS_KNOWN_SCREENS = KNOWN_SCREEN_LIST.length > 0;
+
+    const sequenceListEl = document.getElementById('sequence-list');
+    const statusEl = document.getElementById('status');
+    const saveButton = document.getElementById('save-button');
+
+    let catalogThumbnails = new Map();
+    let dragIndex = null;
+
+    function setStatus(text, kind = '') {
+      statusEl.textContent = text;
+      statusEl.className = '';
+      if (kind) {
+        statusEl.classList.add(kind);
+      }
     }
 
-    document.querySelectorAll('.screen-card').forEach(card => {
-      const key = card.dataset.screen;
-      const select = card.querySelector('select');
-      const thumb = document.getElementById('thumb-' + key.replace(/ /g,'_'));
-
-      if (select) {
-        select.addEventListener('change', () => updateCardState(card));
+    function cloneEntry(entry) {
+      if (typeof entry === 'string') {
+        return entry;
       }
+      if (!entry || typeof entry !== 'object') {
+        return entry;
+      }
+      if (Array.isArray(entry)) {
+        return entry.map(cloneEntry);
+      }
+      const clone = {};
+      for (const [key, value] of Object.entries(entry)) {
+        clone[key] = cloneEntry(value);
+      }
+      return clone;
+    }
 
-      fetch(`/api/screenshots/${key.replace(/ /g,'_')}`)
-        .then(r => r.json())
-        .then(list => {
-          if (list.length) {
-            thumb.src = `/screenshots/${list[0]}`;
-          } else {
-            thumb.style.display = 'none';
+    function entryType(entry) {
+      if (typeof entry === 'string') return 'screen';
+      if (!entry || typeof entry !== 'object') return 'screen';
+      if ('cycle' in entry) return 'cycle';
+      if ('variants' in entry) return 'variants';
+      if ('every' in entry) return 'every';
+      return 'screen';
+    }
+
+    function normaliseEntry(entry) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (!trimmed) {
+          throw new Error('Screen id cannot be empty');
+        }
+        if (!KNOWN_SCREEN_SET.has(trimmed)) {
+          throw new Error(`Unknown screen id "${trimmed}"`);
+        }
+        return trimmed;
+      }
+      if (!entry || typeof entry !== 'object') {
+        throw new Error('Unsupported entry type');
+      }
+      const keys = Object.keys(entry);
+      if (keys.length === 1 && keys[0] === 'screen') {
+        return normaliseEntry(entry.screen);
+      }
+      if ('cycle' in entry) {
+        if (!Array.isArray(entry.cycle) || entry.cycle.length === 0) {
+          throw new Error('Cycle must contain at least one entry');
+        }
+        return { cycle: entry.cycle.map(normaliseEntry) };
+      }
+      if ('variants' in entry) {
+        if (!Array.isArray(entry.variants) || entry.variants.length === 0) {
+          throw new Error('Variants must include at least one screen');
+        }
+        const variants = entry.variants.map(v => {
+          if (typeof v !== 'string') {
+            throw new Error('Variants only support screen ids');
           }
+          return normaliseEntry(v);
+        });
+        return { variants };
+      }
+      if ('every' in entry) {
+        const freq = Number(entry.every);
+        if (!Number.isInteger(freq) || freq <= 0) {
+          throw new Error('Every frequency must be a positive integer');
+        }
+        const childRaw = entry.screen ?? entry.item;
+        if (childRaw === undefined) {
+          throw new Error('Every rule requires a child entry');
+        }
+        return { every: freq, screen: normaliseEntry(childRaw) };
+      }
+      throw new Error('Unsupported schedule entry');
+    }
+
+    function normaliseSequence(seq) {
+      if (!Array.isArray(seq) || seq.length === 0) {
+        throw new Error('Sequence must contain at least one entry');
+      }
+      return seq.map(normaliseEntry);
+    }
+
+    let sequence = Array.isArray(INITIAL_CONFIG?.sequence) && INITIAL_CONFIG.sequence.length
+      ? INITIAL_CONFIG.sequence.map(cloneEntry)
+      : [];
+    if (sequence.length === 0 && HAS_KNOWN_SCREENS) {
+      try {
+        sequence = [normaliseEntry(KNOWN_SCREEN_LIST[0])];
+      } catch (err) {
+        console.warn('Failed to seed default entry', err);
+      }
+    }
+
+    function summariseEntry(entry) {
+      const type = entryType(entry);
+      if (type === 'screen') {
+        return entry;
+      }
+      if (type === 'cycle') {
+        const items = entry.cycle.map(item => summariseEntry(item));
+        return `Cycle (${items.length}): ${items.join(', ')}`;
+      }
+      if (type === 'variants') {
+        return `Variants: ${entry.variants.join(', ')}`;
+      }
+      if (type === 'every') {
+        return `Every ${entry.every}: ${summariseEntry(entry.screen)}`;
+      }
+      return String(entry);
+    }
+
+    function entryToLines(entry) {
+      const type = entryType(entry);
+      if (type === 'cycle') {
+        return entry.cycle.map(e => typeof e === 'string' ? e : JSON.stringify(e, null, 0)).join('\n');
+      }
+      if (type === 'variants') {
+        return entry.variants.join('\n');
+      }
+      if (type === 'every') {
+        return typeof entry.screen === 'string' ? entry.screen : JSON.stringify(entry.screen);
+      }
+      return '';
+    }
+
+    function resolvePrimaryScreen(entry) {
+      const type = entryType(entry);
+      if (type === 'screen') {
+        return entry;
+      }
+      if (type === 'cycle' && entry.cycle.length) {
+        return resolvePrimaryScreen(entry.cycle[0]);
+      }
+      if (type === 'variants' && entry.variants.length) {
+        return entry.variants[0];
+      }
+      if (type === 'every') {
+        return resolvePrimaryScreen(entry.screen);
+      }
+      return null;
+    }
+
+    function createOptionSelect(value) {
+      const select = document.createElement('select');
+      KNOWN_SCREEN_LIST.forEach(screenId => {
+        const opt = document.createElement('option');
+        opt.value = screenId;
+        opt.textContent = screenId;
+        select.appendChild(opt);
+      });
+      if (!KNOWN_SCREEN_LIST.length) {
+        select.disabled = true;
+      } else {
+        select.value = value && KNOWN_SCREEN_SET.has(value) ? value : KNOWN_SCREEN_LIST[0];
+      }
+      return select;
+    }
+
+    function parseCycleValue(value) {
+      const lines = value.split(/\n+/).map(line => line.trim()).filter(Boolean);
+      if (!lines.length) {
+        throw new Error('Cycle must contain at least one entry');
+      }
+      return lines.map(line => {
+        if (line.startsWith('{')) {
+          const parsed = JSON.parse(line);
+          return normaliseEntry(parsed);
+        }
+        return normaliseEntry(line);
+      });
+    }
+
+    function parseVariantValue(value) {
+      const parts = value.split(/[\n,]+/).map(p => p.trim()).filter(Boolean);
+      if (!parts.length) {
+        throw new Error('Variants must contain at least one screen');
+      }
+      return parts.map(part => {
+        if (!KNOWN_SCREEN_SET.has(part)) {
+          throw new Error(`Unknown screen id "${part}"`);
+        }
+        return part;
+      });
+    }
+
+    function parseEveryChild(value) {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        throw new Error('Child entry cannot be empty');
+      }
+      if (trimmed.startsWith('{')) {
+        return normaliseEntry(JSON.parse(trimmed));
+      }
+      return normaliseEntry(trimmed);
+    }
+
+    function renderSequence() {
+      sequenceListEl.innerHTML = '';
+      sequence.forEach((entry, index) => {
+        const item = document.createElement('li');
+        item.className = 'sequence-item';
+        item.draggable = true;
+        item.dataset.index = index;
+
+        const handle = document.createElement('div');
+        handle.className = 'drag-handle';
+        handle.textContent = '⋮⋮';
+        item.appendChild(handle);
+
+        const main = document.createElement('div');
+        main.className = 'item-main';
+        item.appendChild(main);
+
+        const topRow = document.createElement('div');
+        topRow.className = 'item-top-row';
+
+        const typeWrap = document.createElement('div');
+        typeWrap.className = 'item-type';
+
+        const thumb = document.createElement('img');
+        thumb.className = 'thumbnail';
+        const primary = resolvePrimaryScreen(entry);
+        if (primary && catalogThumbnails.has(primary)) {
+          thumb.src = catalogThumbnails.get(primary);
+          thumb.alt = primary + ' thumbnail';
+        } else {
+          thumb.style.visibility = 'hidden';
+        }
+        typeWrap.appendChild(thumb);
+
+        const typeSelect = document.createElement('select');
+        [['screen', 'Screen'], ['cycle', 'Cycle'], ['variants', 'Variants'], ['every', 'Every']].forEach(([value, label]) => {
+          const opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = label;
+          typeSelect.appendChild(opt);
+        });
+        typeSelect.value = entryType(entry);
+        typeWrap.appendChild(typeSelect);
+
+        const summary = document.createElement('div');
+        summary.className = 'summary';
+        summary.textContent = summariseEntry(entry);
+        topRow.appendChild(typeWrap);
+        topRow.appendChild(summary);
+        main.appendChild(topRow);
+
+        const controls = document.createElement('div');
+        controls.className = 'item-controls';
+        main.appendChild(controls);
+
+        function refreshSummary() {
+          summary.textContent = summariseEntry(sequence[index]);
+          const primaryScreen = resolvePrimaryScreen(sequence[index]);
+          if (primaryScreen && catalogThumbnails.has(primaryScreen)) {
+            thumb.src = catalogThumbnails.get(primaryScreen);
+            thumb.alt = primaryScreen + ' thumbnail';
+            thumb.style.visibility = 'visible';
+          } else {
+            thumb.removeAttribute('src');
+            thumb.style.visibility = 'hidden';
+          }
+        }
+
+        function renderControlsForType(type) {
+          controls.innerHTML = '';
+          if (type === 'screen') {
+            const screenSelect = createOptionSelect(typeof sequence[index] === 'string' ? sequence[index] : KNOWN_SCREEN_LIST[0]);
+            screenSelect.addEventListener('change', () => {
+              try {
+                sequence[index] = normaliseEntry(screenSelect.value);
+                refreshSummary();
+                screenSelect.setCustomValidity('');
+              } catch (err) {
+                screenSelect.setCustomValidity(err.message);
+                screenSelect.reportValidity();
+              }
+            });
+            controls.appendChild(screenSelect);
+          } else if (type === 'cycle') {
+            const textarea = document.createElement('textarea');
+            textarea.placeholder = 'One entry per line. Use JSON for advanced rules.';
+            if (entryType(sequence[index]) === 'cycle') {
+              textarea.value = entryToLines(sequence[index]);
+            }
+            textarea.addEventListener('input', () => {
+              try {
+                const values = parseCycleValue(textarea.value);
+                sequence[index] = normaliseEntry({ cycle: values });
+                textarea.setCustomValidity('');
+                refreshSummary();
+              } catch (err) {
+                textarea.setCustomValidity(err.message);
+                textarea.reportValidity();
+              }
+            });
+            controls.appendChild(textarea);
+          } else if (type === 'variants') {
+            const textarea = document.createElement('textarea');
+            textarea.placeholder = 'Fallback screens, one per line or comma separated.';
+            if (entryType(sequence[index]) === 'variants') {
+              textarea.value = entryToLines(sequence[index]);
+            }
+            textarea.addEventListener('input', () => {
+              try {
+                const variants = parseVariantValue(textarea.value);
+                sequence[index] = normaliseEntry({ variants });
+                textarea.setCustomValidity('');
+                refreshSummary();
+              } catch (err) {
+                textarea.setCustomValidity(err.message);
+                textarea.reportValidity();
+              }
+            });
+            controls.appendChild(textarea);
+          } else if (type === 'every') {
+            const row = document.createElement('div');
+            row.className = 'field-row';
+            const freqLabel = document.createElement('label');
+            freqLabel.textContent = 'Every';
+            const freqInput = document.createElement('input');
+            freqInput.type = 'number';
+            freqInput.min = '1';
+            freqInput.value = entryType(sequence[index]) === 'every' ? sequence[index].every : 2;
+
+            const childLabel = document.createElement('label');
+            childLabel.textContent = 'Screen / rule';
+            const childInput = document.createElement('input');
+            childInput.type = 'text';
+            childInput.placeholder = 'Screen id or JSON rule';
+            childInput.value = entryType(sequence[index]) === 'every' ? entryToLines(sequence[index]) : KNOWN_SCREEN_LIST[0] ?? '';
+
+            freqInput.addEventListener('input', () => {
+              try {
+                const child = parseEveryChild(childInput.value);
+                sequence[index] = normaliseEntry({ every: freqInput.value, screen: child });
+                freqInput.setCustomValidity('');
+                childInput.setCustomValidity('');
+                refreshSummary();
+              } catch (err) {
+                freqInput.setCustomValidity(err.message);
+                freqInput.reportValidity();
+              }
+            });
+            childInput.addEventListener('input', () => {
+              try {
+                const child = parseEveryChild(childInput.value);
+                sequence[index] = normaliseEntry({ every: freqInput.value, screen: child });
+                childInput.setCustomValidity('');
+                freqInput.setCustomValidity('');
+                refreshSummary();
+              } catch (err) {
+                childInput.setCustomValidity(err.message);
+                childInput.reportValidity();
+              }
+            });
+
+            row.appendChild(freqLabel);
+            row.appendChild(freqInput);
+            row.appendChild(childLabel);
+            row.appendChild(childInput);
+            controls.appendChild(row);
+          }
+        }
+
+        renderControlsForType(typeSelect.value);
+
+        typeSelect.addEventListener('change', () => {
+          if (!HAS_KNOWN_SCREENS) {
+            setStatus('No known screens are registered; update screens_catalog.py first.', 'error');
+            typeSelect.value = entryType(sequence[index]);
+            return;
+          }
+          let replacement;
+          const chosen = typeSelect.value;
+          if (chosen === 'screen') {
+            replacement = normaliseEntry(KNOWN_SCREEN_LIST[0]);
+          } else if (chosen === 'cycle') {
+            replacement = normaliseEntry({ cycle: [KNOWN_SCREEN_LIST[0]] });
+          } else if (chosen === 'variants') {
+            replacement = normaliseEntry({ variants: [KNOWN_SCREEN_LIST[0]] });
+          } else if (chosen === 'every') {
+            replacement = normaliseEntry({ every: 2, screen: KNOWN_SCREEN_LIST[0] });
+          }
+          sequence[index] = replacement;
+          renderSequence();
         });
 
-      updateCardState(card);
-    });
+        const footer = document.createElement('div');
+        footer.className = 'item-footer';
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'danger';
+        removeButton.textContent = 'Remove';
+        removeButton.addEventListener('click', () => {
+          sequence.splice(index, 1);
+          renderSequence();
+        });
+        footer.appendChild(removeButton);
+        main.appendChild(footer);
 
-    // Save config
-    document.getElementById('screens-form').addEventListener('submit', e => {
-      e.preventDefault();
-      const data = {};
-      document.querySelectorAll('.screen-card select').forEach(select => {
-        const key = select.name.match(/^screens\[(.*)\]$/)[1];
-        data[key] = parseInt(select.value, 10) || 0;
+        item.addEventListener('dragstart', (event) => {
+          dragIndex = index;
+          item.classList.add('dragging');
+          event.dataTransfer.effectAllowed = 'move';
+        });
+        item.addEventListener('dragend', () => {
+          dragIndex = null;
+          item.classList.remove('dragging');
+        });
+        item.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        });
+        item.addEventListener('drop', (event) => {
+          event.preventDefault();
+          const targetIndex = Number(event.currentTarget.dataset.index);
+          if (dragIndex === null || dragIndex === targetIndex) {
+            return;
+          }
+          const [moved] = sequence.splice(dragIndex, 1);
+          sequence.splice(targetIndex, 0, moved);
+          renderSequence();
+        });
+
+        sequenceListEl.appendChild(item);
       });
-      fetch('/save_config', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({screens:data})
-      })
-      .then(r => r.json())
-      .then(res => alert(res.status==='success' ? 'Configuration saved.' : 'Error: '+res.message));
+    }
+
+    function ensureSequenceValid() {
+      try {
+        const validated = normaliseSequence(sequence);
+        return validated.map(cloneEntry);
+      } catch (err) {
+        setStatus(err.message, 'error');
+        throw err;
+      }
+    }
+
+    function addEntry(type) {
+      let entry;
+      if (!HAS_KNOWN_SCREENS) {
+        setStatus('No known screens are registered; update screens_catalog.py first.', 'error');
+        return;
+      }
+      if (type === 'screen') {
+        entry = normaliseEntry(KNOWN_SCREEN_LIST[0]);
+      } else if (type === 'cycle') {
+        entry = normaliseEntry({ cycle: [KNOWN_SCREEN_LIST[0]] });
+      } else if (type === 'variants') {
+        entry = normaliseEntry({ variants: [KNOWN_SCREEN_LIST[0]] });
+      } else if (type === 'every') {
+        entry = normaliseEntry({ every: 2, screen: KNOWN_SCREEN_LIST[0] });
+      }
+      sequence.push(entry);
+      renderSequence();
+    }
+
+    document.getElementById('add-screen').addEventListener('click', () => addEntry('screen'));
+    document.getElementById('add-cycle').addEventListener('click', () => addEntry('cycle'));
+    document.getElementById('add-variants').addEventListener('click', () => addEntry('variants'));
+    document.getElementById('add-every').addEventListener('click', () => addEntry('every'));
+
+    saveButton.addEventListener('click', async () => {
+      if (!sequence.length) {
+        setStatus('Add at least one sequence entry before saving.', 'error');
+        return;
+      }
+      let payload;
+      try {
+        payload = ensureSequenceValid();
+      } catch (err) {
+        return;
+      }
+
+      saveButton.disabled = true;
+      setStatus('Saving…');
+      try {
+        const response = await fetch('/save_config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sequence: payload })
+        });
+        const result = await response.json();
+        if (!response.ok || result.status !== 'success') {
+          throw new Error(result.message || 'Failed to save configuration');
+        }
+        sequence = result.config.sequence.map(cloneEntry);
+        renderSequence();
+        setStatus('Schedule saved successfully.', 'success');
+      } catch (err) {
+        console.error(err);
+        setStatus(err.message || 'Failed to save configuration', 'error');
+      } finally {
+        saveButton.disabled = false;
+      }
     });
 
-    // Load logs
-    fetch('/logs')
-      .then(r => r.json())
-      .then(obj => {
-        for (const [name, text] of Object.entries(obj)) {
-          const pre = document.getElementById('log-' + name);
-          if (pre) pre.textContent = text;
+    async function loadCatalog() {
+      try {
+        const response = await fetch('/api/catalog');
+        const result = await response.json();
+        if (result.status === 'ok' && Array.isArray(result.screens)) {
+          catalogThumbnails = new Map(
+            result.screens
+              .filter(item => item.thumbnail)
+              .map(item => [item.id, item.thumbnail])
+          );
+          renderSequence();
+        }
+      } catch (err) {
+        console.warn('Failed to load catalog thumbnails', err);
+      }
+    }
+
+    function loadLogs() {
+      fetch('/logs')
+        .then(r => r.json())
+        .then(obj => {
+          for (const [name, text] of Object.entries(obj)) {
+            const pre = document.getElementById('log-' + name);
+            if (pre) {
+              pre.textContent = text;
+            }
+          }
+        })
+        .catch(err => console.warn('Failed to load logs', err));
+    }
+
+    if (!HAS_KNOWN_SCREENS) {
+      ['add-screen', 'add-cycle', 'add-variants', 'add-every'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.disabled = true;
         }
       });
+      setStatus('No screens registered in the catalog. Update screens_catalog.py to add entries.', 'error');
+    }
+
+    renderSequence();
+    loadCatalog();
+    loadLogs();
   </script>
 </body>
 </html>
