@@ -239,4 +239,13 @@ def rollback_config():
 
 
 if __name__ == "__main__":  # pragma: no cover
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    host = os.environ.get("ADMIN_HOST", "0.0.0.0")
+    port = int(os.environ.get("ADMIN_PORT", "5001"))
+    debug = os.environ.get("ADMIN_DEBUG") == "1" or os.environ.get("FLASK_DEBUG") == "1"
+
+    if debug:
+        app.run(host=host, port=port, debug=True)
+    else:
+        from waitress import serve
+
+        serve(app, host=host, port=port)
