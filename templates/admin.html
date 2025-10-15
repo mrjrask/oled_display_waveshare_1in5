@@ -460,8 +460,10 @@
     </div>
   </div>
 
+  <script id="bootstrap-data" type="application/json">{{ bootstrap | tojson }}</script>
   <script>
-    window.BOOTSTRAP = {{ bootstrap | safe }};
+    const bootstrapEl = document.getElementById('bootstrap-data');
+    window.BOOTSTRAP = JSON.parse(bootstrapEl.textContent);
   </script>
   <script>
     const supportsStructuredClone = typeof structuredClone === 'function';
