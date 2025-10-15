@@ -7,16 +7,16 @@
     "weather2": 2,
     "inside": 2,
     "verano logo": 0,
-    "vrnof": 4,
+    "vrnof": 5,
     "travel": 2,
     "bears logo": 4,
     "bears next": 4,
     "nfl logo": 0,
     "NFL Scoreboard": 4,
     "NFL Overview NFC": 3,
-    "NFL Overview AFC": 1,
-    "NFL Standings NFC": 9,
-    "NFL Standings AFC": 9,
+    "NFL Overview AFC": 3,
+    "NFL Standings NFC": 8,
+    "NFL Standings AFC": 8,
     "hawks logo": 0,
     "hawks last": 2,
     "hawks live": 2,
@@ -30,8 +30,8 @@
     "nhl logo": 0,
     "NHL Scoreboard": 3,
     "NHL Standings Overview": 3,
-    "NHL Standings West": 8,
-    "NHL Standings East": 8,
+    "NHL Standings West": 7,
+    "NHL Standings East": 7,
     "cubs logo": 0,
     "cubs stand1": 0,
     "cubs stand2": 0,
@@ -60,7 +60,7 @@
     "AL West": 0,
     "AL Wild Card": 0,
     "nba logo": 0,
-    "NBA Scoreboard": 7
+    "NBA Scoreboard": 6
   }
 }
 
