@@ -879,22 +879,29 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
             losses = str(team.get("losses", 0))
             ties = str(team.get("ties", 0))
 
-            # Logo
-            logo = _load_logo_cached(abbr)
-            if logo:
-                logo_y = row_y + ROW_PADDING + (ROW_HEIGHT - ROW_PADDING * 2 - logo.height) // 2
-                img.paste(logo, (LEFT_MARGIN, logo_y), logo)
-
             # Abbreviation
+            text_top = row_y + ROW_PADDING
+            text_center = text_top
             try:
                 l, t, r, b = draw.textbbox((0, 0), abbr, font=ROW_FONT)
                 tw, th = r - l, b - t
                 tx = COLUMN_LAYOUT["team"] - l
                 ty = row_y + ROW_PADDING - t
+                text_top = ty
+                text_center = text_top + th / 2
             except Exception:  # pragma: no cover - PIL fallback
                 tw, th = draw.textsize(abbr, font=ROW_FONT)
                 tx = COLUMN_LAYOUT["team"]
                 ty = row_y + ROW_PADDING
+                text_top = ty
+                text_center = text_top + th / 2
+
+            # Logo
+            logo = _load_logo_cached(abbr)
+            if logo:
+                logo_y = int(text_center - logo.height / 2)
+                img.paste(logo, (LEFT_MARGIN, logo_y), logo)
+
             draw.text((tx, ty), abbr, font=ROW_FONT, fill=WHITE)
 
             # Record columns
