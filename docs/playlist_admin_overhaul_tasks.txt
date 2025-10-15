@@ -1,0 +1,72 @@
+PLAYLIST SCHEDULING OVERHAUL TASKS
+
+This checklist captures the work needed to make playlist management easier while adding reusable playlists, a rule wizard, timeline overrides, previews, and configuration versioning.
+
+1. Playlist-centric configuration schema
+   - Define config schema v2
+     * Introduce top-level keys: catalog, playlists, sequence, metadata.
+     * Allow playlists entries to declare ordered steps (screen IDs, nested playlists, or rule descriptors).
+     * Specify backward-compatibility and migration rules from the current sequence array.
+   - Implement migration helper
+     * Add a schedule_migrations.py module to convert existing configs into the new schema.
+     * Provide a CLI (python schedule_migrations.py migrate --input screens_config.json) for manual conversions and unit tests for regression.
+   - Extend scheduler parser
+     * Update schedule.py to parse playlists, inline nested playlists, and map rule descriptors (every, cycle, variants) to existing node types.
+     * Add support for conditions (time-of-day, day-of-week) that wrap nodes in a condition-aware decorator.
+     * Ensure the hot-reload path (likely main.py watch loop) uses the new parser without restarting services.
+
+2. Admin backend enhancements
+   - Expose playlist catalog endpoint
+     * Update admin.py to return available screens, playlist definitions, and active sequence for the UI.
+     * Include validation errors and migration status in the payload so the UI can guide users.
+   - Persist playlist edits
+     * Replace the existing /save_config handler with one that accepts the v2 schema payload.
+     * Implement server-side validation, normalization (for example, ensure referenced playlists exist), and write-through to screens_config.json.
+     * Add audit logging (JSON file or SQLite) capturing who changed what and when.
+   - Provide configuration previews
+     * Add a /preview endpoint that simulates N upcoming screens using ScreenScheduler.next_available to back the UI preview button.
+
+3. Admin UI improvements
+   - Playlist list and drag-and-drop sequence editor
+     * Rework templates/admin.html (and accompanying JS/CSS) to render playlists as cards with draggable handles.
+     * Allow insertion of preset blocks (NFL cycle, MLB rotation, etc.) from a sidebar populated by the catalog endpoint.
+   - Rule wizard forms
+     * Build modal or inline forms for common rule patterns: frequency (Show <screen> every <n> loops), cycles (Rotate through [...]), variants (Use first available from [...]).
+     * Serialize the user-friendly inputs into the schema descriptors before sending to the backend.
+   - Condition editor
+     * Provide UI controls for optional time-of-day and day-of-week restrictions on playlists.
+     * Show current condition summary badges on playlist cards.
+   - Preview drawer
+     * Add a "Simulate next 20 screens" button that calls the backend preview endpoint and displays results in a slide-out panel.
+   - Version history UI
+     * Surface past config versions with timestamp and summary; allow selecting one to restore.
+
+4. Configuration versioning and rollback
+   - Introduce storage layer
+     * Create config_store.py encapsulating reads and writes to JSON plus version metadata stored in SQLite or a git-backed directory.
+     * Automatically record a new version on every admin save with diff summary (changed playlists, conditions, etc.).
+   - Rollback API
+     * Add a backend route (POST /config/rollback) to restore a prior version and trigger a write to screens_config.json.
+     * Ensure the runtime hot-reload picks up the rollback instantly.
+   - Automated pruning and backup
+     * Schedule a maintenance job (could be part of admin save) to prune old versions beyond a retention threshold and optionally archive to S3 or disk.
+
+5. Testing and tooling
+   - Unit tests
+     * Expand tests in tests/test_schedule.py (or a new module) to cover playlist parsing, condition filtering, and nested playlist expansion.
+     * Test the migration helper, config store, and preview endpoint using fixtures.
+   - Integration tests
+     * Use the Flask test client to exercise admin endpoints (list, save, preview, rollback) with both valid and invalid payloads.
+     * Add front-end Jest or Cypress tests for drag-and-drop flows if the UI stack supports it; otherwise, create Selenium or Playwright smoke tests.
+   - Developer documentation
+     * Update README.md with schema v2 overview, migration instructions, and admin UI usage.
+     * Document new CLI tooling and troubleshooting steps.
+
+6. Deployment and rollout
+   - Feature flag or staged rollout
+     * Guard the new UI behind a config flag initially, allowing fallback to the existing UI.
+     * Provide a migration checklist (backup configs, run migration script, validate preview output).
+   - Monitoring and alerts
+     * Add logging around scheduler rebuilds and config reloads; integrate with existing monitoring to alert on repeated failures.
+
+Completing these tasks moves the system toward a playlist-driven, user-friendly scheduling experience that supports complex rules without manual JSON edits or service restarts.
