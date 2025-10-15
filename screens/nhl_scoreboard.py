@@ -59,15 +59,16 @@ COL_X = [0]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT        = clone_font(FONT_TEAM_SPORTS, 18)
-STATUS_FONT       = clone_font(FONT_STATUS, 15)
-CENTER_FONT       = clone_font(FONT_STATUS, 15)
-TITLE_FONT        = FONT_TITLE_SPORTS
-LOGO_HEIGHT       = 22
-LOGO_DIR          = os.path.join(IMAGES_DIR, "nhl")
-LEAGUE_LOGO_KEYS   = ("NHL", "nhl")
-LEAGUE_LOGO_GAP    = 4
-LEAGUE_LOGO_HEIGHT = max(1, int(round(LOGO_HEIGHT * 1.25)))
+SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 18)
+STATUS_FONT             = clone_font(FONT_STATUS, 15)
+CENTER_FONT             = clone_font(FONT_STATUS, 15)
+TITLE_FONT              = FONT_TITLE_SPORTS
+LOGO_HEIGHT             = 22
+LOGO_DIR                = os.path.join(IMAGES_DIR, "nhl")
+LEAGUE_LOGO_KEYS        = ("NHL", "nhl")
+LEAGUE_LOGO_GAP         = 4
+LEAGUE_LOGO_HEIGHT      = max(1, int(round(LOGO_HEIGHT * 1.25)))
+IN_PROGRESS_SCORE_COLOR = (255, 210, 66)  # #ffd242
 
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
 _LEAGUE_LOGO: Optional[Image.Image] = None
@@ -146,6 +147,20 @@ def _should_display_scores(game: dict) -> bool:
     if code in {"3", "4"}:  # Live or Final in NHL stats API
         return True
     if "progress" in detailed or "final" in detailed:
+        return True
+    return False
+
+
+def _is_game_in_progress(game: dict) -> bool:
+    status = (game or {}).get("status", {}) or {}
+    abstract = (status.get("abstractGameState") or "").lower()
+    if abstract == "live":
+        return True
+    code = (status.get("statusCode") or "").strip()
+    if code == "3":
+        return True
+    detailed = (status.get("detailedState") or "").lower()
+    if "progress" in detailed:
         return True
     return False
 
@@ -240,11 +255,13 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
     show_scores = _should_display_scores(game)
     away_text = _score_text(away, show=show_scores)
     home_text = _score_text(home, show=show_scores)
+    in_progress = _is_game_in_progress(game)
 
     score_top = top
     for idx, text in ((0, away_text), (2, "@"), (4, home_text)):
         font = SCORE_FONT if idx != 2 else CENTER_FONT
-        _center_text(draw, text, font, COL_X[idx], COL_WIDTHS[idx], score_top, SCORE_ROW_H)
+        fill = IN_PROGRESS_SCORE_COLOR if in_progress and idx in (0, 4) else (255, 255, 255)
+        _center_text(draw, text, font, COL_X[idx], COL_WIDTHS[idx], score_top, SCORE_ROW_H, fill=fill)
 
     for idx, team_side in ((1, away), (3, home)):
         team_obj = (team_side or {}).get("team", {})

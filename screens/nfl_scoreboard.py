@@ -52,15 +52,16 @@ COL_X = [0]
 for w in COL_WIDTHS:
     COL_X.append(COL_X[-1] + w)
 
-SCORE_FONT        = clone_font(FONT_TEAM_SPORTS, 18)
-STATUS_FONT       = clone_font(FONT_STATUS, 15)
-CENTER_FONT       = clone_font(FONT_STATUS, 15)
-TITLE_FONT        = FONT_TITLE_SPORTS
-LOGO_HEIGHT       = 22
-LOGO_DIR          = os.path.join(IMAGES_DIR, "nfl")
-LEAGUE_LOGO_KEYS   = ("NFL", "nfl")
-LEAGUE_LOGO_GAP    = 4
-LEAGUE_LOGO_HEIGHT = max(1, int(round(LOGO_HEIGHT * 1.25)))
+SCORE_FONT              = clone_font(FONT_TEAM_SPORTS, 18)
+STATUS_FONT             = clone_font(FONT_STATUS, 15)
+CENTER_FONT             = clone_font(FONT_STATUS, 15)
+TITLE_FONT              = FONT_TITLE_SPORTS
+LOGO_HEIGHT             = 22
+LOGO_DIR                = os.path.join(IMAGES_DIR, "nfl")
+LEAGUE_LOGO_KEYS        = ("NFL", "nfl")
+LEAGUE_LOGO_GAP         = 4
+LEAGUE_LOGO_HEIGHT      = max(1, int(round(LOGO_HEIGHT * 1.25)))
+IN_PROGRESS_SCORE_COLOR = (255, 210, 66)  # #ffd242
 
 IN_GAME_STATUS_OVERRIDES = {
     "end of the 1st": "End of the 1st",
@@ -154,6 +155,13 @@ def _should_display_scores(game: dict) -> bool:
     return False
 
 
+def _is_game_in_progress(game: dict) -> bool:
+    status = (game or {}).get("status", {}) or {}
+    type_info = status.get("type") or {}
+    state = (type_info.get("state") or "").lower()
+    return state == "in"
+
+
 def _score_text(side: dict, *, show: bool) -> str:
     if not show:
         return "—"
@@ -227,11 +235,13 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
     show_scores = _should_display_scores(game)
     away_text = _score_text(away, show=show_scores)
     home_text = _score_text(home, show=show_scores)
+    in_progress = _is_game_in_progress(game)
 
     score_top = top
     for idx, text in ((0, away_text), (2, "@"), (4, home_text)):
         font = SCORE_FONT if idx != 2 else CENTER_FONT
-        _center_text(draw, text, font, COL_X[idx], COL_WIDTHS[idx], score_top, SCORE_ROW_H)
+        fill = IN_PROGRESS_SCORE_COLOR if in_progress and idx in (0, 4) else (255, 255, 255)
+        _center_text(draw, text, font, COL_X[idx], COL_WIDTHS[idx], score_top, SCORE_ROW_H, fill=fill)
 
     for idx, team_side in ((1, away), (3, home)):
         team_obj = (team_side or {}).get("team", {})
