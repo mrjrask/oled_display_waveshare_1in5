@@ -3,193 +3,387 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>OLED Admin</title>
+  <title>Playlist Scheduler Admin</title>
   <style>
     :root {
       color-scheme: light dark;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
     }
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      max-width: 960px;
-      margin: 1.5rem auto;
-      line-height: 1.5;
-      padding: 0 1rem 3rem;
-    }
-    h1 {
-      font-size: 1.5rem;
-      margin: 1rem 0 0.5rem;
-    }
-    p.description {
-      margin-top: 0.25rem;
-      color: #555;
-      font-size: 0.95rem;
-    }
-    .sequence-header {
+      margin: 0;
+      min-height: 100vh;
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      background: radial-gradient(circle at top, rgba(59,130,246,0.15), transparent 55%), #0f172a;
+    }
+    header {
+      padding: 1.5rem 2rem 1rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      display: flex;
       justify-content: space-between;
+      flex-wrap: wrap;
       gap: 1rem;
-      flex-wrap: wrap;
     }
-    .add-buttons {
+    header h1 {
+      margin: 0;
+      font-size: 1.75rem;
+      letter-spacing: -0.02em;
+    }
+    header .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      background: rgba(59,130,246,0.15);
+      border: 1px solid rgba(96,165,250,0.35);
+      color: #bfdbfe;
+    }
+    .toolbar {
       display: flex;
-      gap: 0.5rem;
       flex-wrap: wrap;
+      gap: 0.75rem;
+      padding: 0.75rem 2rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
     button, select, input, textarea {
       font: inherit;
     }
     button {
-      padding: 0.45rem 0.9rem;
-      border-radius: 6px;
+      padding: 0.55rem 1rem;
+      border-radius: 999px;
       border: none;
       cursor: pointer;
-      background: #2563eb;
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
       color: white;
-      transition: background 0.2s ease;
+      font-weight: 600;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+      box-shadow: 0 10px 20px rgba(59,130,246,0.25);
     }
     button.secondary {
-      background: #475569;
+      background: rgba(148, 163, 184, 0.12);
+      box-shadow: none;
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.25);
     }
     button.danger {
-      background: #b91c1c;
-    }
-    button:hover {
-      background: #1d4ed8;
-    }
-    button.secondary:hover {
-      background: #334155;
-    }
-    button.danger:hover {
-      background: #991b1b;
+      background: linear-gradient(135deg, #dc2626, #b91c1c);
+      box-shadow: 0 10px 20px rgba(239,68,68,0.25);
     }
     button[disabled] {
       opacity: 0.6;
       cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none;
     }
-    .sequence-list {
+    button:hover:not([disabled]) {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(79,70,229,0.35);
+    }
+    button.secondary:hover:not([disabled]) {
+      box-shadow: none;
+      border-color: rgba(148, 163, 184, 0.45);
+    }
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) minmax(360px, 1fr) minmax(260px, 320px);
+      gap: 1.25rem;
+      padding: 1.5rem 2rem 4.5rem;
+    }
+    section {
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 18px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: 0 20px 35px rgba(15, 23, 42, 0.45);
+    }
+    section h2 {
+      margin: 0;
+      font-size: 1.1rem;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #sequence-list, .steps-list {
       list-style: none;
-      margin: 1rem 0 1.5rem;
+      margin: 0;
       padding: 0;
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
     }
-    .sequence-item {
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
-      padding: 0.9rem 1rem;
-      background: #f9fafb;
+    .sequence-item, .step-item {
       display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 0.75rem 1rem;
-      align-items: start;
-      position: relative;
+      grid-template-columns: 32px 1fr auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.75rem 0.9rem;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(30, 41, 59, 0.7);
+      transition: border-color 0.15s ease, transform 0.15s ease;
     }
     .sequence-item.dragging {
       opacity: 0.6;
+      transform: scale(0.99);
     }
     .drag-handle {
       cursor: grab;
       user-select: none;
-      font-size: 1.5rem;
-      line-height: 1;
-      color: #6b7280;
-      padding-right: 0.25rem;
+      font-size: 1.4rem;
+      color: rgba(148, 163, 184, 0.8);
+      text-align: center;
     }
-    .item-main {
+    .item-body {
       display: grid;
-      gap: 0.6rem;
+      gap: 0.35rem;
     }
-    .item-top-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .item-type {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-    .item-type select {
-      min-width: 140px;
-    }
-    .summary {
+    .item-title {
       font-weight: 600;
+      font-size: 0.95rem;
     }
-    .item-controls {
+    .item-meta {
+      font-size: 0.78rem;
+      color: rgba(148, 163, 184, 0.85);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .item-actions {
+      display: flex;
+      gap: 0.4rem;
+    }
+    .item-actions button {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.75rem;
+    }
+    .playlist-card {
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(30, 41, 59, 0.6);
+      padding: 1rem;
       display: grid;
-      gap: 0.6rem;
+      gap: 0.9rem;
+    }
+    .playlist-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 0.75rem;
+    }
+    .playlist-title {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .playlist-title input {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 10px;
+      padding: 0.4rem 0.6rem;
+      color: inherit;
+      font-size: 0.95rem;
+    }
+    .badge-small {
+      background: rgba(59, 130, 246, 0.18);
+      border: 1px solid rgba(96, 165, 250, 0.35);
+      color: #bfdbfe;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      display: inline-flex;
+      gap: 0.25rem;
+      align-items: center;
+    }
+    .step-controls {
+      display: flex;
+      gap: 0.35rem;
+    }
+    .step-controls button {
+      padding: 0.3rem 0.45rem;
+      font-size: 0.7rem;
+    }
+    .sidebar-list {
+      display: grid;
+      gap: 0.65rem;
+    }
+    .sidebar-card {
+      padding: 0.75rem;
+      border-radius: 12px;
+      background: rgba(30, 41, 59, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      display: grid;
+      gap: 0.45rem;
+      font-size: 0.85rem;
     }
     textarea {
-      min-height: 80px;
-      padding: 0.5rem;
-      border-radius: 6px;
-      border: 1px solid #cbd5f5;
-      resize: vertical;
-      background: white;
+      width: 100%;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: inherit;
+      padding: 0.6rem;
+      min-height: 120px;
     }
-    .field-row {
+    .status-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 0.75rem 2rem;
+      background: rgba(15, 23, 42, 0.95);
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
       display: flex;
+      justify-content: space-between;
       flex-wrap: wrap;
       gap: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .status-bar .error {
+      color: #fca5a5;
+    }
+    #preview-drawer {
+      position: fixed;
+      right: 1.5rem;
+      bottom: 5rem;
+      width: min(420px, calc(100% - 3rem));
+      max-height: 60vh;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 18px;
+      padding: 1rem 1.25rem;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.6);
+      display: none;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    #preview-drawer.open {
+      display: flex;
+    }
+    #preview-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 45vh;
+      overflow: auto;
+      display: grid;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+    }
+    #preview-list li {
+      padding: 0.35rem 0.55rem;
+      border-radius: 10px;
+      background: rgba(30, 41, 59, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      z-index: 50;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 18px;
+      padding: 1.5rem;
+      width: min(520px, 100%);
+      display: grid;
+      gap: 1rem;
+      max-height: 80vh;
+      overflow: auto;
+    }
+    .modal h3 {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+    .modal label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+    .modal input, .modal select {
+      width: 100%;
+      padding: 0.5rem 0.6rem;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(15, 23, 42, 0.75);
+      color: inherit;
+    }
+    .wizard-list {
+      display: grid;
+      gap: 0.5rem;
+    }
+    .wizard-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 0.5rem;
       align-items: center;
     }
-    .field-row label {
-      font-weight: 600;
+    .wizard-row button {
+      padding: 0.35rem 0.45rem;
+      font-size: 0.75rem;
     }
-    .field-row input, .field-row select {
-      padding: 0.35rem 0.5rem;
-      border-radius: 6px;
-      border: 1px solid #cbd5f5;
-      background: white;
-      min-width: 140px;
-    }
-    .thumbnail {
-      width: 48px;
-      height: 48px;
-      border-radius: 8px;
-      object-fit: cover;
-      border: 1px solid #e5e7eb;
-      background: #e5e7eb;
-    }
-    .item-footer {
-      display: flex;
-      justify-content: flex-end;
-    }
-    #status {
-      min-height: 1.25rem;
-      font-weight: 600;
-    }
-    #status.error {
-      color: #b91c1c;
-    }
-    #status.success {
-      color: #166534;
-    }
-    .logs {
-      margin-top: 3rem;
-    }
-    .log-panels {
+    .day-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      gap: 0.45rem;
     }
-    .log-panel pre {
-      background: #111827;
-      color: #e5e7eb;
-      padding: 0.75rem;
-      border-radius: 8px;
-      max-height: 220px;
-      overflow: auto;
-      font-size: 0.8rem;
-      white-space: pre-wrap;
+    .day-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border-radius: 999px;
+      padding: 0.3rem 0.65rem;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      cursor: pointer;
+      background: rgba(30, 41, 59, 0.75);
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .day-chip input {
+      pointer-events: none;
+    }
+    .day-chip.selected {
+      background: rgba(59, 130, 246, 0.22);
+      border-color: rgba(96, 165, 250, 0.45);
+    }
+    @media (max-width: 1100px) {
+      main {
+        grid-template-columns: 1fr;
+      }
     }
     @media (max-width: 640px) {
-      .sequence-item {
+      header, .toolbar {
+        padding: 1rem;
+      }
+      main {
+        padding: 1.25rem 1rem 4.5rem;
+      }
+      section {
+        padding: 1rem;
+      }
+      .sequence-item, .step-item {
         grid-template-columns: 1fr;
       }
       .drag-handle {
@@ -199,601 +393,1094 @@
   </style>
 </head>
 <body>
-  <h1>OLED Screens Schedule</h1>
-  <p class="description">Drag entries to reorder the playback sequence. Use the editors to adjust cycle contents, variant fallbacks, or frequency rules.</p>
+  <header>
+    <h1>Playlist Scheduler</h1>
+    <div class="badge" id="migration-badge"></div>
+  </header>
 
-  <div class="sequence-header">
-    <div class="add-buttons">
-      <button type="button" id="add-screen">Add screen</button>
-      <button type="button" id="add-cycle" class="secondary">Add cycle</button>
-      <button type="button" id="add-variants" class="secondary">Add variants</button>
-      <button type="button" id="add-every" class="secondary">Add frequency rule</button>
-    </div>
-    <button type="button" id="save-button">Save schedule</button>
+  <div class="toolbar">
+    <button type="button" id="save-button">Save changes</button>
+    <button type="button" class="secondary" id="preview-button">Simulate next 20 screens</button>
+    <button type="button" class="secondary" id="new-playlist">New playlist</button>
+    <button type="button" class="secondary" id="add-sequence-playlist">Insert playlist into sequence</button>
+    <button type="button" class="secondary" id="add-sequence-screen">Insert screen into sequence</button>
+    <div style="flex:1"></div>
+    <input id="actor-input" type="text" placeholder="Actor (optional)" style="max-width:180px;padding:0.45rem 0.7rem;border-radius:999px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.65);color:inherit;">
+    <input id="summary-input" type="text" placeholder="Summary" style="max-width:220px;padding:0.45rem 0.7rem;border-radius:999px;border:1px solid rgba(148,163,184,0.25);background:rgba(15,23,42,0.65);color:inherit;">
   </div>
 
-  <div id="status" role="status" aria-live="polite"></div>
-
-  <ul id="sequence-list" class="sequence-list" aria-label="Screen sequence"></ul>
-
-  <section class="logs">
-    <h1>Service Logs</h1>
-    <div class="log-panels">
-      <div class="log-panel">
-        <strong>Display Service</strong>
-        <pre id="log-Display">Loading…</pre>
+  <main>
+    <section id="sequence-panel">
+      <h2><span>Active sequence</span><span id="sequence-count"></span></h2>
+      <ul id="sequence-list" aria-live="polite"></ul>
+      <div class="sidebar-card" id="sequence-help">
+        Drag items to reorder playback. Sequence entries can reference playlists, individual screens, or rules created via the wizards inside each playlist.
       </div>
-      <div class="log-panel">
-        <strong>Admin Service</strong>
-        <pre id="log-Admin">Loading…</pre>
+    </section>
+
+    <section id="playlists-panel">
+      <h2>Playlists</h2>
+      <div id="playlists-container" class="sidebar-list"></div>
+    </section>
+
+    <section id="history-panel">
+      <h2>Version history</h2>
+      <div class="sidebar-card">
+        <p style="margin:0;font-size:0.85rem;color:rgba(148,163,184,0.9);">Restore any previous save. Versions beyond the retention window are pruned automatically.</p>
+      </div>
+      <div id="history-container" class="sidebar-list"></div>
+      <div class="sidebar-card" id="preset-card">
+        <h3 style="margin:0;font-size:0.95rem;">Preset blocks</h3>
+        <div id="preset-container" class="sidebar-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="status-bar">
+    <div id="status-text">Ready.</div>
+    <div id="validation-text"></div>
+  </div>
+
+  <div id="preview-drawer">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <strong>Preview</strong>
+      <button type="button" class="secondary" id="close-preview">Close</button>
+    </div>
+    <ul id="preview-list"></ul>
+  </div>
+
+  <div id="modal-backdrop" class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true">
+      <h3 id="modal-title"></h3>
+      <div id="modal-content"></div>
+      <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+        <button type="button" class="secondary" id="modal-cancel">Cancel</button>
+        <button type="button" id="modal-confirm">Apply</button>
       </div>
     </div>
-  </section>
+  </div>
 
   <script>
-    const INITIAL_CONFIG = {{ config_json | safe }};
-    const KNOWN_SCREEN_LIST = {{ known_screens | safe }};
-    const KNOWN_SCREEN_SET = new Set(KNOWN_SCREEN_LIST);
-    const HAS_KNOWN_SCREENS = KNOWN_SCREEN_LIST.length > 0;
+    window.BOOTSTRAP = {{ bootstrap | safe }};
+  </script>
+  <script>
+    const state = {
+      config: structuredClone ? structuredClone(window.BOOTSTRAP.config) : JSON.parse(JSON.stringify(window.BOOTSTRAP.config)),
+      screens: window.BOOTSTRAP.screens || [],
+      validation: window.BOOTSTRAP.validation || [],
+      migrated: Boolean(window.BOOTSTRAP.migrated),
+      versions: window.BOOTSTRAP.versions || [],
+      latestVersionId: window.BOOTSTRAP.latest_version_id || null,
+      dirty: false,
+      saving: false,
+      preview: [],
+      previewOpen: false,
+      statusMessage: null,
+    };
 
     const sequenceListEl = document.getElementById('sequence-list');
-    const statusEl = document.getElementById('status');
-    const saveButton = document.getElementById('save-button');
+    const playlistsContainer = document.getElementById('playlists-container');
+    const historyContainer = document.getElementById('history-container');
+    const presetContainer = document.getElementById('preset-container');
+    const statusText = document.getElementById('status-text');
+    const validationText = document.getElementById('validation-text');
+    const sequenceCount = document.getElementById('sequence-count');
+    const migrationBadge = document.getElementById('migration-badge');
+    const previewDrawer = document.getElementById('preview-drawer');
+    const previewList = document.getElementById('preview-list');
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const modalTitle = document.getElementById('modal-title');
+    const modalContent = document.getElementById('modal-content');
+    const modalConfirm = document.getElementById('modal-confirm');
+    const modalCancel = document.getElementById('modal-cancel');
+    const actorInput = document.getElementById('actor-input');
+    const summaryInput = document.getElementById('summary-input');
 
-    let catalogThumbnails = new Map();
     let dragIndex = null;
+    let modalHandler = null;
 
-    function setStatus(text, kind = '') {
-      statusEl.textContent = text;
-      statusEl.className = '';
-      if (kind) {
-        statusEl.classList.add(kind);
-      }
+    function markDirty() {
+      state.dirty = true;
+      state.statusMessage = null;
+      renderStatus();
     }
 
-    function cloneEntry(entry) {
-      if (typeof entry === 'string') {
-        return entry;
-      }
-      if (!entry || typeof entry !== 'object') {
-        return entry;
-      }
-      if (Array.isArray(entry)) {
-        return entry.map(cloneEntry);
-      }
-      const clone = {};
-      for (const [key, value] of Object.entries(entry)) {
-        clone[key] = cloneEntry(value);
-      }
-      return clone;
-    }
-
-    function entryType(entry) {
-      if (typeof entry === 'string') return 'screen';
-      if (!entry || typeof entry !== 'object') return 'screen';
-      if ('cycle' in entry) return 'cycle';
-      if ('variants' in entry) return 'variants';
-      if ('every' in entry) return 'every';
-      return 'screen';
-    }
-
-    function normaliseEntry(entry) {
-      if (typeof entry === 'string') {
-        const trimmed = entry.trim();
-        if (!trimmed) {
-          throw new Error('Screen id cannot be empty');
-        }
-        if (!KNOWN_SCREEN_SET.has(trimmed)) {
-          throw new Error(`Unknown screen id "${trimmed}"`);
-        }
-        return trimmed;
-      }
-      if (!entry || typeof entry !== 'object') {
-        throw new Error('Unsupported entry type');
-      }
-      const keys = Object.keys(entry);
-      if (keys.length === 1 && keys[0] === 'screen') {
-        return normaliseEntry(entry.screen);
-      }
-      if ('cycle' in entry) {
-        if (!Array.isArray(entry.cycle) || entry.cycle.length === 0) {
-          throw new Error('Cycle must contain at least one entry');
-        }
-        return { cycle: entry.cycle.map(normaliseEntry) };
-      }
-      if ('variants' in entry) {
-        if (!Array.isArray(entry.variants) || entry.variants.length === 0) {
-          throw new Error('Variants must include at least one screen');
-        }
-        const variants = entry.variants.map(v => {
-          if (typeof v !== 'string') {
-            throw new Error('Variants only support screen ids');
-          }
-          return normaliseEntry(v);
-        });
-        return { variants };
-      }
-      if ('every' in entry) {
-        const freq = Number(entry.every);
-        if (!Number.isInteger(freq) || freq <= 0) {
-          throw new Error('Every frequency must be a positive integer');
-        }
-        const childRaw = entry.screen ?? entry.item;
-        if (childRaw === undefined) {
-          throw new Error('Every rule requires a child entry');
-        }
-        return { every: freq, screen: normaliseEntry(childRaw) };
-      }
-      throw new Error('Unsupported schedule entry');
-    }
-
-    function normaliseSequence(seq) {
-      if (!Array.isArray(seq) || seq.length === 0) {
-        throw new Error('Sequence must contain at least one entry');
-      }
-      return seq.map(normaliseEntry);
-    }
-
-    let sequence = Array.isArray(INITIAL_CONFIG?.sequence) && INITIAL_CONFIG.sequence.length
-      ? INITIAL_CONFIG.sequence.map(cloneEntry)
-      : [];
-    if (sequence.length === 0 && HAS_KNOWN_SCREENS) {
+    function clone(value) {
       try {
-        sequence = [normaliseEntry(KNOWN_SCREEN_LIST[0])];
+        return structuredClone(value);
       } catch (err) {
-        console.warn('Failed to seed default entry', err);
+        return JSON.parse(JSON.stringify(value));
       }
     }
 
-    function summariseEntry(entry) {
-      const type = entryType(entry);
-      if (type === 'screen') {
-        return entry;
+    function ensureSequenceNotEmpty() {
+      if (!Array.isArray(state.config.sequence) || state.config.sequence.length === 0) {
+        state.config.sequence = [{ playlist: Object.keys(state.config.playlists)[0] || 'main' }];
       }
-      if (type === 'cycle') {
-        const items = entry.cycle.map(item => summariseEntry(item));
-        return `Cycle (${items.length}): ${items.join(', ')}`;
-      }
-      if (type === 'variants') {
-        return `Variants: ${entry.variants.join(', ')}`;
-      }
-      if (type === 'every') {
-        return `Every ${entry.every}: ${summariseEntry(entry.screen)}`;
-      }
-      return String(entry);
     }
 
-    function entryToLines(entry) {
-      const type = entryType(entry);
-      if (type === 'cycle') {
-        return entry.cycle.map(e => typeof e === 'string' ? e : JSON.stringify(e, null, 0)).join('\n');
+    function summariseStep(step) {
+      if (typeof step === 'string') {
+        return { title: `Screen · ${step}`, meta: [] };
       }
-      if (type === 'variants') {
-        return entry.variants.join('\n');
+      if (!step || typeof step !== 'object') {
+        return { title: 'Unknown entry', meta: [] };
       }
-      if (type === 'every') {
-        return typeof entry.screen === 'string' ? entry.screen : JSON.stringify(entry.screen);
+      if (step.playlist) {
+        const pl = state.config.playlists[step.playlist];
+        const label = pl?.label ? `${pl.label} (${step.playlist})` : step.playlist;
+        return { title: `Playlist · ${label}`, meta: describeConditions(step.conditions) };
       }
-      return '';
-    }
-
-    function resolvePrimaryScreen(entry) {
-      const type = entryType(entry);
-      if (type === 'screen') {
-        return entry;
+      if (step.screen) {
+        return { title: `Screen · ${step.screen}`, meta: describeConditions(step.conditions) };
       }
-      if (type === 'cycle' && entry.cycle.length) {
-        return resolvePrimaryScreen(entry.cycle[0]);
-      }
-      if (type === 'variants' && entry.variants.length) {
-        return entry.variants[0];
-      }
-      if (type === 'every') {
-        return resolvePrimaryScreen(entry.screen);
-      }
-      return null;
-    }
-
-    function createOptionSelect(value) {
-      const select = document.createElement('select');
-      KNOWN_SCREEN_LIST.forEach(screenId => {
-        const opt = document.createElement('option');
-        opt.value = screenId;
-        opt.textContent = screenId;
-        select.appendChild(opt);
-      });
-      if (!KNOWN_SCREEN_LIST.length) {
-        select.disabled = true;
-      } else {
-        select.value = value && KNOWN_SCREEN_SET.has(value) ? value : KNOWN_SCREEN_LIST[0];
-      }
-      return select;
-    }
-
-    function parseCycleValue(value) {
-      const lines = value.split(/\n+/).map(line => line.trim()).filter(Boolean);
-      if (!lines.length) {
-        throw new Error('Cycle must contain at least one entry');
-      }
-      return lines.map(line => {
-        if (line.startsWith('{')) {
-          const parsed = JSON.parse(line);
-          return normaliseEntry(parsed);
+      if (step.rule) {
+        const rule = step.rule;
+        if (rule.type === 'variants') {
+          return { title: 'Rule · Variants', meta: [`Options: ${(rule.options || []).join(', ')}`].concat(describeConditions(step.conditions)) };
         }
-        return normaliseEntry(line);
-      });
-    }
-
-    function parseVariantValue(value) {
-      const parts = value.split(/[\n,]+/).map(p => p.trim()).filter(Boolean);
-      if (!parts.length) {
-        throw new Error('Variants must contain at least one screen');
-      }
-      return parts.map(part => {
-        if (!KNOWN_SCREEN_SET.has(part)) {
-          throw new Error(`Unknown screen id "${part}"`);
+        if (rule.type === 'cycle') {
+          return { title: 'Rule · Cycle', meta: [`Items: ${summariseInline(rule.items || rule.cycle || [])}`].concat(describeConditions(step.conditions)) };
         }
-        return part;
-      });
+        if (rule.type === 'every') {
+          return { title: 'Rule · Every', meta: [`Every ${rule.frequency || rule.every}`, summariseStep(rule.item || rule.screen).title].concat(describeConditions(step.conditions)) };
+        }
+        return { title: `Rule · ${rule.type || 'custom'}`, meta: describeConditions(step.conditions) };
+      }
+      if (step.steps) {
+        return { title: 'Inline playlist', meta: [`Steps: ${step.steps.length}`].concat(describeConditions(step.conditions)) };
+      }
+      return { title: 'Entry', meta: describeConditions(step.conditions) };
     }
 
-    function parseEveryChild(value) {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        throw new Error('Child entry cannot be empty');
+    function summariseInline(items) {
+      return items.map(item => {
+        const info = summariseStep(item);
+        return info.title.replace('Screen · ', '').replace('Playlist · ', '');
+      }).join(', ');
+    }
+
+    function describeConditions(conditions) {
+      if (!conditions || typeof conditions !== 'object') return [];
+      const meta = [];
+      if (conditions.days_of_week || conditions.day_of_week) {
+        const days = conditions.days_of_week || conditions.day_of_week || [];
+        const list = Array.isArray(days) ? days : [days];
+        meta.push(`Days: ${list.join(', ')}`);
       }
-      if (trimmed.startsWith('{')) {
-        return normaliseEntry(JSON.parse(trimmed));
+      const ranges = conditions.time_of_day || conditions.time_ranges;
+      if (Array.isArray(ranges) && ranges.length) {
+        meta.push(`Time: ${ranges.map(r => `${r.start}–${r.end}`).join('; ')}`);
       }
-      return normaliseEntry(trimmed);
+      return meta;
     }
 
     function renderSequence() {
       sequenceListEl.innerHTML = '';
-      sequence.forEach((entry, index) => {
-        const item = document.createElement('li');
-        item.className = 'sequence-item';
-        item.draggable = true;
-        item.dataset.index = index;
+      state.config.sequence.forEach((step, index) => {
+        const li = document.createElement('li');
+        li.className = 'sequence-item';
+        li.draggable = true;
+        li.dataset.index = index;
+
+        li.addEventListener('dragstart', (event) => {
+          dragIndex = index;
+          li.classList.add('dragging');
+          event.dataTransfer.effectAllowed = 'move';
+        });
+        li.addEventListener('dragend', () => {
+          dragIndex = null;
+          li.classList.remove('dragging');
+        });
+        li.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          const targetIndex = Number(li.dataset.index);
+          if (dragIndex === targetIndex) return;
+          if (dragIndex === null) return;
+          const item = state.config.sequence.splice(dragIndex, 1)[0];
+          state.config.sequence.splice(targetIndex, 0, item);
+          dragIndex = targetIndex;
+          renderSequence();
+          markDirty();
+        });
 
         const handle = document.createElement('div');
         handle.className = 'drag-handle';
         handle.textContent = '⋮⋮';
-        item.appendChild(handle);
 
-        const main = document.createElement('div');
-        main.className = 'item-main';
-        item.appendChild(main);
-
-        const topRow = document.createElement('div');
-        topRow.className = 'item-top-row';
-
-        const typeWrap = document.createElement('div');
-        typeWrap.className = 'item-type';
-
-        const thumb = document.createElement('img');
-        thumb.className = 'thumbnail';
-        const primary = resolvePrimaryScreen(entry);
-        if (primary && catalogThumbnails.has(primary)) {
-          thumb.src = catalogThumbnails.get(primary);
-          thumb.alt = primary + ' thumbnail';
-        } else {
-          thumb.style.visibility = 'hidden';
-        }
-        typeWrap.appendChild(thumb);
-
-        const typeSelect = document.createElement('select');
-        [['screen', 'Screen'], ['cycle', 'Cycle'], ['variants', 'Variants'], ['every', 'Every']].forEach(([value, label]) => {
-          const opt = document.createElement('option');
-          opt.value = value;
-          opt.textContent = label;
-          typeSelect.appendChild(opt);
-        });
-        typeSelect.value = entryType(entry);
-        typeWrap.appendChild(typeSelect);
-
-        const summary = document.createElement('div');
-        summary.className = 'summary';
-        summary.textContent = summariseEntry(entry);
-        topRow.appendChild(typeWrap);
-        topRow.appendChild(summary);
-        main.appendChild(topRow);
-
-        const controls = document.createElement('div');
-        controls.className = 'item-controls';
-        main.appendChild(controls);
-
-        function refreshSummary() {
-          summary.textContent = summariseEntry(sequence[index]);
-          const primaryScreen = resolvePrimaryScreen(sequence[index]);
-          if (primaryScreen && catalogThumbnails.has(primaryScreen)) {
-            thumb.src = catalogThumbnails.get(primaryScreen);
-            thumb.alt = primaryScreen + ' thumbnail';
-            thumb.style.visibility = 'visible';
-          } else {
-            thumb.removeAttribute('src');
-            thumb.style.visibility = 'hidden';
-          }
+        const body = document.createElement('div');
+        body.className = 'item-body';
+        const summary = summariseStep(step);
+        const title = document.createElement('div');
+        title.className = 'item-title';
+        title.textContent = summary.title;
+        body.appendChild(title);
+        if (summary.meta.length) {
+          const meta = document.createElement('div');
+          meta.className = 'item-meta';
+          summary.meta.forEach(text => {
+            const span = document.createElement('span');
+            span.className = 'badge-small';
+            span.textContent = text;
+            meta.appendChild(span);
+          });
+          body.appendChild(meta);
         }
 
-        function renderControlsForType(type) {
-          controls.innerHTML = '';
-          if (type === 'screen') {
-            const screenSelect = createOptionSelect(typeof sequence[index] === 'string' ? sequence[index] : KNOWN_SCREEN_LIST[0]);
-            screenSelect.addEventListener('change', () => {
-              try {
-                sequence[index] = normaliseEntry(screenSelect.value);
-                refreshSummary();
-                screenSelect.setCustomValidity('');
-              } catch (err) {
-                screenSelect.setCustomValidity(err.message);
-                screenSelect.reportValidity();
-              }
-            });
-            controls.appendChild(screenSelect);
-          } else if (type === 'cycle') {
-            const textarea = document.createElement('textarea');
-            textarea.placeholder = 'One entry per line. Use JSON for advanced rules.';
-            if (entryType(sequence[index]) === 'cycle') {
-              textarea.value = entryToLines(sequence[index]);
-            }
-            textarea.addEventListener('input', () => {
-              try {
-                const values = parseCycleValue(textarea.value);
-                sequence[index] = normaliseEntry({ cycle: values });
-                textarea.setCustomValidity('');
-                refreshSummary();
-              } catch (err) {
-                textarea.setCustomValidity(err.message);
-                textarea.reportValidity();
-              }
-            });
-            controls.appendChild(textarea);
-          } else if (type === 'variants') {
-            const textarea = document.createElement('textarea');
-            textarea.placeholder = 'Fallback screens, one per line or comma separated.';
-            if (entryType(sequence[index]) === 'variants') {
-              textarea.value = entryToLines(sequence[index]);
-            }
-            textarea.addEventListener('input', () => {
-              try {
-                const variants = parseVariantValue(textarea.value);
-                sequence[index] = normaliseEntry({ variants });
-                textarea.setCustomValidity('');
-                refreshSummary();
-              } catch (err) {
-                textarea.setCustomValidity(err.message);
-                textarea.reportValidity();
-              }
-            });
-            controls.appendChild(textarea);
-          } else if (type === 'every') {
-            const row = document.createElement('div');
-            row.className = 'field-row';
-            const freqLabel = document.createElement('label');
-            freqLabel.textContent = 'Every';
-            const freqInput = document.createElement('input');
-            freqInput.type = 'number';
-            freqInput.min = '1';
-            freqInput.value = entryType(sequence[index]) === 'every' ? sequence[index].every : 2;
+        const actions = document.createElement('div');
+        actions.className = 'item-actions';
 
-            const childLabel = document.createElement('label');
-            childLabel.textContent = 'Screen / rule';
-            const childInput = document.createElement('input');
-            childInput.type = 'text';
-            childInput.placeholder = 'Screen id or JSON rule';
-            childInput.value = entryType(sequence[index]) === 'every' ? entryToLines(sequence[index]) : KNOWN_SCREEN_LIST[0] ?? '';
+        const editButton = document.createElement('button');
+        editButton.type = 'button';
+        editButton.className = 'secondary';
+        editButton.textContent = 'Edit';
+        editButton.addEventListener('click', () => openSequenceEditor(index));
 
-            freqInput.addEventListener('input', () => {
-              try {
-                const child = parseEveryChild(childInput.value);
-                sequence[index] = normaliseEntry({ every: freqInput.value, screen: child });
-                freqInput.setCustomValidity('');
-                childInput.setCustomValidity('');
-                refreshSummary();
-              } catch (err) {
-                freqInput.setCustomValidity(err.message);
-                freqInput.reportValidity();
-              }
-            });
-            childInput.addEventListener('input', () => {
-              try {
-                const child = parseEveryChild(childInput.value);
-                sequence[index] = normaliseEntry({ every: freqInput.value, screen: child });
-                childInput.setCustomValidity('');
-                freqInput.setCustomValidity('');
-                refreshSummary();
-              } catch (err) {
-                childInput.setCustomValidity(err.message);
-                childInput.reportValidity();
-              }
-            });
-
-            row.appendChild(freqLabel);
-            row.appendChild(freqInput);
-            row.appendChild(childLabel);
-            row.appendChild(childInput);
-            controls.appendChild(row);
-          }
-        }
-
-        renderControlsForType(typeSelect.value);
-
-        typeSelect.addEventListener('change', () => {
-          if (!HAS_KNOWN_SCREENS) {
-            setStatus('No known screens are registered; update screens_catalog.py first.', 'error');
-            typeSelect.value = entryType(sequence[index]);
-            return;
-          }
-          let replacement;
-          const chosen = typeSelect.value;
-          if (chosen === 'screen') {
-            replacement = normaliseEntry(KNOWN_SCREEN_LIST[0]);
-          } else if (chosen === 'cycle') {
-            replacement = normaliseEntry({ cycle: [KNOWN_SCREEN_LIST[0]] });
-          } else if (chosen === 'variants') {
-            replacement = normaliseEntry({ variants: [KNOWN_SCREEN_LIST[0]] });
-          } else if (chosen === 'every') {
-            replacement = normaliseEntry({ every: 2, screen: KNOWN_SCREEN_LIST[0] });
-          }
-          sequence[index] = replacement;
-          renderSequence();
-        });
-
-        const footer = document.createElement('div');
-        footer.className = 'item-footer';
         const removeButton = document.createElement('button');
         removeButton.type = 'button';
-        removeButton.className = 'danger';
+        removeButton.className = 'secondary';
         removeButton.textContent = 'Remove';
         removeButton.addEventListener('click', () => {
-          sequence.splice(index, 1);
-          renderSequence();
+          state.config.sequence.splice(index, 1);
+          ensureSequenceNotEmpty();
+          renderAll();
+          markDirty();
         });
-        footer.appendChild(removeButton);
-        main.appendChild(footer);
 
-        item.addEventListener('dragstart', (event) => {
-          dragIndex = index;
-          item.classList.add('dragging');
-          event.dataTransfer.effectAllowed = 'move';
+        actions.appendChild(editButton);
+        actions.appendChild(removeButton);
+
+        li.appendChild(handle);
+        li.appendChild(body);
+        li.appendChild(actions);
+        sequenceListEl.appendChild(li);
+      });
+
+      sequenceCount.textContent = `${state.config.sequence.length} entries`;
+    }
+
+    function renderPlaylists() {
+      playlistsContainer.innerHTML = '';
+      const ids = Object.keys(state.config.playlists);
+      ids.sort();
+      ids.forEach((playlistId) => {
+        const playlist = state.config.playlists[playlistId];
+        const card = document.createElement('div');
+        card.className = 'playlist-card';
+
+        const header = document.createElement('div');
+        header.className = 'playlist-header';
+        const title = document.createElement('div');
+        title.className = 'playlist-title';
+
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.value = playlist.label || '';
+        labelInput.placeholder = `Playlist ${playlistId}`;
+        labelInput.addEventListener('change', () => {
+          playlist.label = labelInput.value.trim();
+          markDirty();
         });
-        item.addEventListener('dragend', () => {
-          dragIndex = null;
-          item.classList.remove('dragging');
-        });
-        item.addEventListener('dragover', (event) => {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'move';
-        });
-        item.addEventListener('drop', (event) => {
-          event.preventDefault();
-          const targetIndex = Number(event.currentTarget.dataset.index);
-          if (dragIndex === null || dragIndex === targetIndex) {
-            return;
+
+        const idTag = document.createElement('span');
+        idTag.className = 'badge-small';
+        idTag.textContent = playlistId;
+
+        title.appendChild(labelInput);
+        title.appendChild(idTag);
+
+        const headerButtons = document.createElement('div');
+        headerButtons.className = 'item-actions';
+
+        const addScreen = document.createElement('button');
+        addScreen.type = 'button';
+        addScreen.className = 'secondary';
+        addScreen.textContent = 'Add screen';
+        addScreen.addEventListener('click', () => openStepWizard(playlistId, 'screen'));
+
+        const addPlaylist = document.createElement('button');
+        addPlaylist.type = 'button';
+        addPlaylist.className = 'secondary';
+        addPlaylist.textContent = 'Add playlist';
+        addPlaylist.addEventListener('click', () => openStepWizard(playlistId, 'playlist'));
+
+        const addRule = document.createElement('button');
+        addRule.type = 'button';
+        addRule.className = 'secondary';
+        addRule.textContent = 'Rule wizard';
+        addRule.addEventListener('click', () => openRuleWizard(playlistId));
+
+        const conditionBtn = document.createElement('button');
+        conditionBtn.type = 'button';
+        conditionBtn.className = 'secondary';
+        conditionBtn.textContent = 'Conditions';
+        conditionBtn.addEventListener('click', () => openConditionEditor(playlistId));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'danger';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.addEventListener('click', () => removePlaylist(playlistId));
+
+        headerButtons.appendChild(addScreen);
+        headerButtons.appendChild(addPlaylist);
+        headerButtons.appendChild(addRule);
+        headerButtons.appendChild(conditionBtn);
+        if (ids.length > 1) headerButtons.appendChild(deleteBtn);
+
+        header.appendChild(title);
+        header.appendChild(headerButtons);
+        card.appendChild(header);
+
+        if (playlist.conditions) {
+          const conditionRow = document.createElement('div');
+          conditionRow.className = 'item-meta';
+          describeConditions(playlist.conditions).forEach(text => {
+            const span = document.createElement('span');
+            span.className = 'badge-small';
+            span.textContent = text;
+            conditionRow.appendChild(span);
+          });
+          if (conditionRow.children.length) {
+            card.appendChild(conditionRow);
           }
-          const [moved] = sequence.splice(dragIndex, 1);
-          sequence.splice(targetIndex, 0, moved);
-          renderSequence();
+        }
+
+        const list = document.createElement('ul');
+        list.className = 'steps-list';
+        (playlist.steps || []).forEach((step, index) => {
+          const item = document.createElement('li');
+          item.className = 'step-item';
+          const summary = summariseStep(step);
+
+          const icon = document.createElement('div');
+          icon.className = 'drag-handle';
+          icon.textContent = index + 1;
+
+          const body = document.createElement('div');
+          body.className = 'item-body';
+          const titleRow = document.createElement('div');
+          titleRow.className = 'item-title';
+          titleRow.textContent = summary.title;
+          body.appendChild(titleRow);
+          if (summary.meta.length) {
+            const meta = document.createElement('div');
+            meta.className = 'item-meta';
+            summary.meta.forEach(text => {
+              const span = document.createElement('span');
+              span.className = 'badge-small';
+              span.textContent = text;
+              meta.appendChild(span);
+            });
+            body.appendChild(meta);
+          }
+
+          const controls = document.createElement('div');
+          controls.className = 'step-controls';
+
+          const upBtn = document.createElement('button');
+          upBtn.type = 'button';
+          upBtn.className = 'secondary';
+          upBtn.textContent = '↑';
+          upBtn.disabled = index === 0;
+          upBtn.addEventListener('click', () => {
+            if (index === 0) return;
+            const steps = playlist.steps;
+            [steps[index - 1], steps[index]] = [steps[index], steps[index - 1]];
+            renderPlaylists();
+            markDirty();
+          });
+
+          const downBtn = document.createElement('button');
+          downBtn.type = 'button';
+          downBtn.className = 'secondary';
+          downBtn.textContent = '↓';
+          downBtn.disabled = index === playlist.steps.length - 1;
+          downBtn.addEventListener('click', () => {
+            if (index === playlist.steps.length - 1) return;
+            const steps = playlist.steps;
+            [steps[index + 1], steps[index]] = [steps[index], steps[index + 1]];
+            renderPlaylists();
+            markDirty();
+          });
+
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.className = 'secondary';
+          editBtn.textContent = 'Edit';
+          editBtn.addEventListener('click', () => openStepEditor(playlistId, index));
+
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'secondary';
+          removeBtn.textContent = '✕';
+          removeBtn.addEventListener('click', () => {
+            playlist.steps.splice(index, 1);
+            renderPlaylists();
+            markDirty();
+          });
+
+          controls.appendChild(upBtn);
+          controls.appendChild(downBtn);
+          controls.appendChild(editBtn);
+          controls.appendChild(removeBtn);
+
+          item.appendChild(icon);
+          item.appendChild(body);
+          item.appendChild(controls);
+          list.appendChild(item);
         });
 
-        sequenceListEl.appendChild(item);
+        card.appendChild(list);
+        playlistsContainer.appendChild(card);
       });
     }
 
-    function ensureSequenceValid() {
-      try {
-        const validated = normaliseSequence(sequence);
-        return validated.map(cloneEntry);
-      } catch (err) {
-        setStatus(err.message, 'error');
-        throw err;
-      }
-    }
-
-    function addEntry(type) {
-      let entry;
-      if (!HAS_KNOWN_SCREENS) {
-        setStatus('No known screens are registered; update screens_catalog.py first.', 'error');
+    function renderHistory() {
+      historyContainer.innerHTML = '';
+      if (!state.versions || !state.versions.length) {
+        const empty = document.createElement('div');
+        empty.className = 'sidebar-card';
+        empty.textContent = 'No saved versions yet.';
+        historyContainer.appendChild(empty);
         return;
       }
-      if (type === 'screen') {
-        entry = normaliseEntry(KNOWN_SCREEN_LIST[0]);
-      } else if (type === 'cycle') {
-        entry = normaliseEntry({ cycle: [KNOWN_SCREEN_LIST[0]] });
-      } else if (type === 'variants') {
-        entry = normaliseEntry({ variants: [KNOWN_SCREEN_LIST[0]] });
-      } else if (type === 'every') {
-        entry = normaliseEntry({ every: 2, screen: KNOWN_SCREEN_LIST[0] });
+      state.versions.forEach(entry => {
+        const card = document.createElement('div');
+        card.className = 'sidebar-card';
+        const title = document.createElement('div');
+        title.style.fontWeight = '600';
+        title.textContent = `#${entry.id} · ${entry.created_at}`;
+        const meta = document.createElement('div');
+        meta.style.fontSize = '0.8rem';
+        meta.style.color = 'rgba(148,163,184,0.85)';
+        meta.textContent = `${entry.actor} — ${entry.summary}`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = 'Restore';
+        button.addEventListener('click', () => rollbackVersion(entry.id));
+        card.appendChild(title);
+        card.appendChild(meta);
+        card.appendChild(button);
+        historyContainer.appendChild(card);
+      });
+    }
+
+    function renderPresets() {
+      presetContainer.innerHTML = '';
+      const catalog = state.config.catalog || {};
+      const presets = catalog.presets || {};
+      const entries = Object.entries(presets);
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.textContent = 'No presets defined. Add presets in catalog → presets in the config file.';
+        presetContainer.appendChild(empty);
+        return;
       }
-      sequence.push(entry);
+      entries.forEach(([presetId, descriptor]) => {
+        const card = document.createElement('div');
+        card.className = 'sidebar-card';
+        card.style.gap = '0.35rem';
+        const title = document.createElement('div');
+        title.style.fontWeight = '600';
+        title.textContent = presetId;
+        const desc = document.createElement('div');
+        desc.style.fontSize = '0.8rem';
+        desc.style.color = 'rgba(148,163,184,0.85)';
+        desc.textContent = summariseStep(descriptor).title;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = 'Insert into sequence';
+        button.addEventListener('click', () => {
+          state.config.sequence.push(clone(descriptor));
+          ensureSequenceNotEmpty();
+          renderAll();
+          markDirty();
+        });
+        card.appendChild(title);
+        card.appendChild(desc);
+        card.appendChild(button);
+        presetContainer.appendChild(card);
+      });
+    }
+
+    function renderStatus() {
+      if (state.statusMessage) {
+        statusText.textContent = state.statusMessage.text;
+        statusText.classList.toggle('error', Boolean(state.statusMessage.error));
+      } else {
+        statusText.classList.remove('error');
+        const parts = [];
+        if (state.dirty) parts.push('Unsaved changes');
+        if (state.saving) parts.push('Saving…');
+        if (!parts.length) parts.push('Ready.');
+        statusText.textContent = parts.join(' · ');
+      }
+
+      if (state.validation && state.validation.length) {
+        validationText.textContent = `Validation: ${state.validation.join(' | ')}`;
+        validationText.className = 'error';
+      } else {
+        validationText.textContent = '';
+        validationText.className = '';
+      }
+
+      migrationBadge.textContent = state.migrated ? 'Migrated to schema v2' : 'Schema v2';
+    }
+
+    function renderPreview() {
+      previewList.innerHTML = '';
+      state.preview.forEach((screenId, idx) => {
+        const li = document.createElement('li');
+        li.textContent = `${idx + 1}. ${screenId}`;
+        previewList.appendChild(li);
+      });
+      previewDrawer.classList.toggle('open', state.previewOpen);
+    }
+
+    function renderAll() {
+      ensureSequenceNotEmpty();
       renderSequence();
+      renderPlaylists();
+      renderHistory();
+      renderPresets();
+      renderStatus();
+      renderPreview();
     }
 
-    document.getElementById('add-screen').addEventListener('click', () => addEntry('screen'));
-    document.getElementById('add-cycle').addEventListener('click', () => addEntry('cycle'));
-    document.getElementById('add-variants').addEventListener('click', () => addEntry('variants'));
-    document.getElementById('add-every').addEventListener('click', () => addEntry('every'));
-
-    saveButton.addEventListener('click', async () => {
-      if (!sequence.length) {
-        setStatus('Add at least one sequence entry before saving.', 'error');
+    function removePlaylist(playlistId) {
+      if (!confirm(`Delete playlist ${playlistId}? Entries referencing it will also be removed.`)) {
         return;
       }
-      let payload;
-      try {
-        payload = ensureSequenceValid();
-      } catch (err) {
-        return;
-      }
+      delete state.config.playlists[playlistId];
+      state.config.sequence = state.config.sequence.filter(entry => !(entry && typeof entry === 'object' && entry.playlist === playlistId));
+      Object.values(state.config.playlists).forEach(pl => {
+        pl.steps = (pl.steps || []).filter(step => !(step && step.playlist === playlistId));
+      });
+      ensureSequenceNotEmpty();
+      renderAll();
+      markDirty();
+    }
 
-      saveButton.disabled = true;
-      setStatus('Saving…');
+    function openModal(title, contentBuilder, onConfirm) {
+      modalTitle.textContent = title;
+      modalContent.innerHTML = '';
+      modalHandler = onConfirm;
+      contentBuilder(modalContent);
+      modalBackdrop.classList.add('open');
+    }
+
+    modalConfirm.addEventListener('click', () => {
+      if (typeof modalHandler === 'function') {
+        const result = modalHandler();
+        if (result === false) {
+          return;
+        }
+      }
+      modalBackdrop.classList.remove('open');
+      modalHandler = null;
+    });
+
+    modalCancel.addEventListener('click', () => {
+      modalBackdrop.classList.remove('open');
+      modalHandler = null;
+    });
+
+    function createOptionSelect(options, value) {
+      const select = document.createElement('select');
+      options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        if (opt.value === value) option.selected = true;
+        select.appendChild(option);
+      });
+      return select;
+    }
+
+    function openStepWizard(playlistId, kind) {
+      openModal('Add to playlist', (container) => {
+        const playlists = Object.keys(state.config.playlists);
+        if (kind === 'screen') {
+          const label = document.createElement('label');
+          label.textContent = 'Screen';
+          const select = createOptionSelect(state.screens.map(id => ({ value: id, label: id })), state.screens[0]);
+          container.appendChild(label);
+          container.appendChild(select);
+          modalHandler = () => {
+            const playlist = state.config.playlists[playlistId];
+            playlist.steps = playlist.steps || [];
+            playlist.steps.push({ screen: select.value });
+            renderPlaylists();
+            markDirty();
+          };
+        } else {
+          const label = document.createElement('label');
+          label.textContent = 'Playlist';
+          const select = createOptionSelect(playlists.map(id => ({ value: id, label: id })), playlistId);
+          container.appendChild(label);
+          container.appendChild(select);
+          modalHandler = () => {
+            const playlist = state.config.playlists[playlistId];
+            playlist.steps = playlist.steps || [];
+            playlist.steps.push({ playlist: select.value });
+            renderPlaylists();
+            markDirty();
+          };
+        }
+      }, () => false);
+    }
+
+    function openRuleWizard(playlistId) {
+      let ruleType = 'every';
+      const containerBuilder = (container) => {
+        const typeLabel = document.createElement('label');
+        typeLabel.textContent = 'Rule type';
+        const typeSelect = createOptionSelect([
+          { value: 'every', label: 'Frequency (show every N loops)' },
+          { value: 'cycle', label: 'Cycle (rotate through items)' },
+          { value: 'variants', label: 'Variants (first available)' },
+        ], ruleType);
+        container.appendChild(typeLabel);
+        container.appendChild(typeSelect);
+
+        const formArea = document.createElement('div');
+        container.appendChild(formArea);
+
+        function renderForm() {
+          formArea.innerHTML = '';
+          ruleType = typeSelect.value;
+          if (ruleType === 'every') {
+            const freqLabel = document.createElement('label');
+            freqLabel.textContent = 'Frequency';
+            const freqInput = document.createElement('input');
+            freqInput.type = 'number';
+            freqInput.min = '1';
+            freqInput.value = '3';
+
+            const screenLabel = document.createElement('label');
+            screenLabel.textContent = 'Screen';
+            const screenSelect = createOptionSelect(state.screens.map(id => ({ value: id, label: id })), state.screens[0]);
+
+            formArea.appendChild(freqLabel);
+            formArea.appendChild(freqInput);
+            formArea.appendChild(screenLabel);
+            formArea.appendChild(screenSelect);
+
+            modalHandler = () => {
+              const freq = parseInt(freqInput.value, 10);
+              if (!Number.isInteger(freq) || freq <= 0) {
+                alert('Frequency must be a positive integer.');
+                return false;
+              }
+              const playlist = state.config.playlists[playlistId];
+              playlist.steps = playlist.steps || [];
+              playlist.steps.push({ rule: { type: 'every', frequency: freq, item: { screen: screenSelect.value } } });
+              renderPlaylists();
+              markDirty();
+            };
+          } else if (ruleType === 'cycle') {
+            const list = document.createElement('div');
+            list.className = 'wizard-list';
+            const items = [];
+
+            function addRow(defaultType = 'screen', defaultValue = state.screens[0]) {
+              const row = document.createElement('div');
+              row.className = 'wizard-row';
+              const typeSelect = createOptionSelect([
+                { value: 'screen', label: 'Screen' },
+                { value: 'playlist', label: 'Playlist' },
+              ], defaultType);
+              const valueSelect = document.createElement('select');
+              function populateValue() {
+                valueSelect.innerHTML = '';
+                const options = typeSelect.value === 'screen' ? state.screens : Object.keys(state.config.playlists);
+                options.forEach(opt => {
+                  const option = document.createElement('option');
+                  option.value = opt;
+                  option.textContent = opt;
+                  valueSelect.appendChild(option);
+                });
+                valueSelect.value = defaultValue;
+              }
+              populateValue();
+              typeSelect.addEventListener('change', () => {
+                defaultValue = typeSelect.value === 'screen' ? state.screens[0] : Object.keys(state.config.playlists)[0];
+                populateValue();
+              });
+              const removeBtn = document.createElement('button');
+              removeBtn.type = 'button';
+              removeBtn.className = 'secondary';
+              removeBtn.textContent = 'Remove';
+              removeBtn.addEventListener('click', () => {
+                const idx = items.indexOf(row);
+                if (idx >= 0) {
+                  items.splice(idx, 1);
+                }
+                row.remove();
+              });
+              row.appendChild(typeSelect);
+              row.appendChild(valueSelect);
+              row.appendChild(removeBtn);
+              items.push(row);
+              list.appendChild(row);
+            }
+
+            addRow();
+
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'secondary';
+            addBtn.textContent = 'Add item';
+            addBtn.addEventListener('click', () => addRow());
+
+            formArea.appendChild(list);
+            formArea.appendChild(addBtn);
+
+            modalHandler = () => {
+              if (!items.length) {
+                alert('Add at least one item to the cycle.');
+                return false;
+              }
+              const descriptors = items.map(row => {
+                const type = row.children[0].value;
+                const value = row.children[1].value;
+                return type === 'screen' ? { screen: value } : { playlist: value };
+              });
+              const playlist = state.config.playlists[playlistId];
+              playlist.steps = playlist.steps || [];
+              playlist.steps.push({ rule: { type: 'cycle', items: descriptors } });
+              renderPlaylists();
+              markDirty();
+            };
+          } else {
+            const list = document.createElement('div');
+            list.className = 'wizard-list';
+            const items = [];
+
+            function addVariant(defaultValue = state.screens[0]) {
+              const row = document.createElement('div');
+              row.className = 'wizard-row';
+              row.style.gridTemplateColumns = '1fr auto';
+              const select = createOptionSelect(state.screens.map(id => ({ value: id, label: id })), defaultValue);
+              const removeBtn = document.createElement('button');
+              removeBtn.type = 'button';
+              removeBtn.className = 'secondary';
+              removeBtn.textContent = 'Remove';
+              removeBtn.addEventListener('click', () => {
+                const idx = items.indexOf(row);
+                if (idx >= 0) {
+                  items.splice(idx, 1);
+                }
+                row.remove();
+              });
+              row.appendChild(select);
+              row.appendChild(removeBtn);
+              items.push(row);
+              list.appendChild(row);
+            }
+
+            addVariant();
+            const addBtn = document.createElement('button');
+            addBtn.type = 'button';
+            addBtn.className = 'secondary';
+            addBtn.textContent = 'Add variant';
+            addBtn.addEventListener('click', () => addVariant());
+
+            formArea.appendChild(list);
+            formArea.appendChild(addBtn);
+
+            modalHandler = () => {
+              const options = items.map(row => row.children[0].value).filter(Boolean);
+              if (!options.length) {
+                alert('Add at least one variant.');
+                return false;
+              }
+              const playlist = state.config.playlists[playlistId];
+              playlist.steps = playlist.steps || [];
+              playlist.steps.push({ rule: { type: 'variants', options } });
+              renderPlaylists();
+              markDirty();
+            };
+          }
+        }
+
+        typeSelect.addEventListener('change', renderForm);
+        renderForm();
+      }, () => false);
+    }
+
+    function openConditionEditor(playlistId) {
+      const playlist = state.config.playlists[playlistId];
+      const conditions = clone(playlist.conditions || {});
+      const selectedDays = new Set((conditions.days_of_week || conditions.day_of_week || []).map(day => day.toLowerCase()));
+      const ranges = Array.isArray(conditions.time_of_day) ? conditions.time_of_day.slice() : [];
+
+      openModal('Conditions', (container) => {
+        const dayLabel = document.createElement('label');
+        dayLabel.textContent = 'Days of week';
+        const dayGrid = document.createElement('div');
+        dayGrid.className = 'day-grid';
+        const days = ['mon','tue','wed','thu','fri','sat','sun'];
+        days.forEach(day => {
+          const chip = document.createElement('label');
+          chip.className = 'day-chip' + (selectedDays.has(day) ? ' selected' : '');
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.checked = selectedDays.has(day);
+          input.addEventListener('change', () => {
+            if (input.checked) selectedDays.add(day); else selectedDays.delete(day);
+            chip.classList.toggle('selected', input.checked);
+          });
+          const span = document.createElement('span');
+          span.textContent = day.toUpperCase();
+          chip.appendChild(input);
+          chip.appendChild(span);
+          dayGrid.appendChild(chip);
+        });
+
+        const rangeLabel = document.createElement('label');
+        rangeLabel.textContent = 'Time of day ranges (HH:MM)';
+        const rangeList = document.createElement('div');
+        rangeList.className = 'wizard-list';
+
+        function renderRanges() {
+          rangeList.innerHTML = '';
+          ranges.forEach((rng, idx) => {
+            const row = document.createElement('div');
+            row.className = 'wizard-row';
+            const start = document.createElement('input');
+            start.type = 'time';
+            start.value = rng.start || '';
+            start.addEventListener('change', () => rng.start = start.value);
+            const end = document.createElement('input');
+            end.type = 'time';
+            end.value = rng.end || '';
+            end.addEventListener('change', () => rng.end = end.value);
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'secondary';
+            remove.textContent = 'Remove';
+            remove.addEventListener('click', () => {
+              ranges.splice(idx, 1);
+              renderRanges();
+            });
+            row.appendChild(start);
+            row.appendChild(end);
+            row.appendChild(remove);
+            rangeList.appendChild(row);
+          });
+        }
+
+        renderRanges();
+        const addRange = document.createElement('button');
+        addRange.type = 'button';
+        addRange.className = 'secondary';
+        addRange.textContent = 'Add range';
+        addRange.addEventListener('click', () => {
+          ranges.push({ start: '08:00', end: '18:00' });
+          renderRanges();
+        });
+
+        container.appendChild(dayLabel);
+        container.appendChild(dayGrid);
+        container.appendChild(rangeLabel);
+        container.appendChild(rangeList);
+        container.appendChild(addRange);
+
+        modalHandler = () => {
+          const output = {};
+          if (selectedDays.size) {
+            output.days_of_week = Array.from(selectedDays);
+          }
+          const cleanedRanges = ranges.filter(r => r.start && r.end);
+          if (cleanedRanges.length) {
+            output.time_of_day = cleanedRanges;
+          }
+          playlist.conditions = Object.keys(output).length ? output : undefined;
+          renderPlaylists();
+          markDirty();
+        };
+      }, () => false);
+    }
+
+    function openStepEditor(playlistId, index) {
+      const playlist = state.config.playlists[playlistId];
+      const step = clone(playlist.steps[index]);
+      openModal('Edit step', (container) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = JSON.stringify(step, null, 2);
+        textarea.rows = 12;
+        container.appendChild(textarea);
+        modalHandler = () => {
+          try {
+            const parsed = JSON.parse(textarea.value);
+            playlist.steps[index] = parsed;
+            renderPlaylists();
+            markDirty();
+          } catch (err) {
+            alert('Invalid JSON: ' + err.message);
+            return false;
+          }
+        };
+      }, () => false);
+    }
+
+    function openSequenceEditor(index) {
+      const step = clone(state.config.sequence[index]);
+      openModal('Edit sequence entry', (container) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = JSON.stringify(step, null, 2);
+        container.appendChild(textarea);
+        modalHandler = () => {
+          try {
+            const parsed = JSON.parse(textarea.value);
+            state.config.sequence[index] = parsed;
+            renderSequence();
+            markDirty();
+          } catch (err) {
+            alert('Invalid JSON: ' + err.message);
+            return false;
+          }
+        };
+      }, () => false);
+    }
+
+    function addPlaylistToSequence() {
+      const ids = Object.keys(state.config.playlists);
+      if (!ids.length) return;
+      openModal('Insert playlist', (container) => {
+        const select = createOptionSelect(ids.map(id => ({ value: id, label: id })), ids[0]);
+        container.appendChild(select);
+        modalHandler = () => {
+          state.config.sequence.push({ playlist: select.value });
+          renderSequence();
+          markDirty();
+        };
+      }, () => false);
+    }
+
+    function addScreenToSequence() {
+      openModal('Insert screen', (container) => {
+        const select = createOptionSelect(state.screens.map(id => ({ value: id, label: id })), state.screens[0]);
+        container.appendChild(select);
+        modalHandler = () => {
+          state.config.sequence.push({ screen: select.value });
+          renderSequence();
+          markDirty();
+        };
+      }, () => false);
+    }
+
+    function createPlaylist() {
+      let counter = Object.keys(state.config.playlists).length + 1;
+      let id;
+      do {
+        id = `playlist_${counter++}`;
+      } while (state.config.playlists[id]);
+      state.config.playlists[id] = { label: `Playlist ${counter}`, steps: [] };
+      state.config.sequence.push({ playlist: id });
+      renderAll();
+      markDirty();
+    }
+
+    async function saveConfig() {
+      state.saving = true;
+      state.statusMessage = null;
+      renderStatus();
       try {
         const response = await fetch('/save_config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sequence: payload })
+          body: JSON.stringify({ config: state.config, actor: actorInput.value || undefined, summary: summaryInput.value || undefined }),
         });
-        const result = await response.json();
-        if (!response.ok || result.status !== 'success') {
-          throw new Error(result.message || 'Failed to save configuration');
+        const payload = await response.json();
+        if (!response.ok || payload.status !== 'success') {
+          throw new Error(payload.message || 'Save failed');
         }
-        sequence = result.config.sequence.map(cloneEntry);
-        renderSequence();
-        setStatus('Schedule saved successfully.', 'success');
+        state.config = payload.config;
+        state.validation = payload.validation || [];
+        state.versions = payload.versions || [];
+        state.latestVersionId = payload.latest_version_id;
+        state.migrated = payload.migrated;
+        state.dirty = false;
+        state.statusMessage = { text: `Saved as version #${payload.version_id}`, error: false };
+        renderAll();
       } catch (err) {
-        console.error(err);
-        setStatus(err.message || 'Failed to save configuration', 'error');
+        state.statusMessage = { text: `Save failed: ${err.message}`, error: true };
       } finally {
-        saveButton.disabled = false;
+        state.saving = false;
+        renderStatus();
       }
-    });
+    }
 
-    async function loadCatalog() {
+    async function runPreview() {
       try {
-        const response = await fetch('/api/catalog');
-        const result = await response.json();
-        if (result.status === 'ok' && Array.isArray(result.screens)) {
-          catalogThumbnails = new Map(
-            result.screens
-              .filter(item => item.thumbnail)
-              .map(item => [item.id, item.thumbnail])
-          );
-          renderSequence();
+        state.statusMessage = { text: 'Generating preview…', error: false };
+        const response = await fetch('/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config: state.config, count: 20 }),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.status !== 'ok') {
+          throw new Error(payload.message || 'Preview failed');
         }
+        state.preview = payload.preview || [];
+        state.previewOpen = true;
+        renderPreview();
+        state.statusMessage = { text: 'Preview generated', error: false };
+        renderStatus();
       } catch (err) {
-        console.warn('Failed to load catalog thumbnails', err);
+        state.statusMessage = { text: `Preview failed: ${err.message}`, error: true };
+        renderStatus();
       }
     }
-
-    function loadLogs() {
-      fetch('/logs')
-        .then(r => r.json())
-        .then(obj => {
-          for (const [name, text] of Object.entries(obj)) {
-            const pre = document.getElementById('log-' + name);
-            if (pre) {
-              pre.textContent = text;
-            }
-          }
-        })
-        .catch(err => console.warn('Failed to load logs', err));
+ 
+    async function rollbackVersion(versionId) {
+      if (!confirm(`Restore configuration version #${versionId}?`)) {
+        return;
+      }
+      try {
+        state.statusMessage = { text: `Restoring version #${versionId}…`, error: false };
+        const response = await fetch('/config/rollback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version_id: versionId, actor: actorInput.value || undefined }),
+        });
+         const payload = await response.json();
+         if (!response.ok || payload.status !== 'success') {
+           throw new Error(payload.message || 'Rollback failed');
+         }
+         state.config = payload.config;
+         state.validation = payload.validation || [];
+        state.versions = payload.versions || [];
+        state.latestVersionId = payload.latest_version_id;
+        state.migrated = payload.migrated;
+        state.dirty = false;
+        state.statusMessage = { text: `Restored version #${versionId}`, error: false };
+        renderAll();
+      } catch (err) {
+        state.statusMessage = { text: `Rollback failed: ${err.message}`, error: true };
+        renderStatus();
+      }
     }
-
-    if (!HAS_KNOWN_SCREENS) {
-      ['add-screen', 'add-cycle', 'add-variants', 'add-every'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) {
-          btn.disabled = true;
-        }
-      });
-      setStatus('No screens registered in the catalog. Update screens_catalog.py to add entries.', 'error');
-    }
-
-    renderSequence();
-    loadCatalog();
-    loadLogs();
-  </script>
-</body>
-</html>
+ 
+     document.getElementById('save-button').addEventListener('click', saveConfig);
+     document.getElementById('preview-button').addEventListener('click', () => {
+       runPreview();
+     });
+     document.getElementById('close-preview').addEventListener('click', () => {
+       state.previewOpen = false;
+       renderPreview();
+     });
+     document.getElementById('new-playlist').addEventListener('click', createPlaylist);
+     document.getElementById('add-sequence-playlist').addEventListener('click', addPlaylistToSequence);
+     document.getElementById('add-sequence-screen').addEventListener('click', addScreenToSequence);
+ 
+     renderAll();
+   </script>
+ </body>
+ </html>

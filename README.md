@@ -119,26 +119,78 @@ Most runtime behavior is controlled in `config.py`:
 
 ### Screen sequencing
 
-`screens_config.json` lets you enable/disable screens and control how often they appear. Example:
+The scheduler now uses a **playlist-centric schema (v2)** that supports reusable playlists, nested playlists, rule descriptors, and optional conditions. A minimal configuration looks like this:
 
 ```json
 {
-  "screens": {
-    "date": 1,
-    "time": 1,
-    "weather1": 1,
-    "cubs last": 2,
-    "cubs live": 2,
-    "cubs next": 2,
-    "NL Overview": 1,
-    "AL Overview": 1
-  }
+  "version": 2,
+  "catalog": {"presets": {}},
+  "metadata": {
+    "ui": {"playlist_admin_enabled": true}
+  },
+  "playlists": {
+    "weather": {
+      "label": "Weather",
+      "steps": [
+        {"screen": "date"},
+        {"screen": "weather1"},
+        {"rule": {"type": "variants", "options": ["travel", "inside"]}}
+      ]
+    },
+    "main": {
+      "label": "Primary loop",
+      "steps": [
+        {"playlist": "weather"},
+        {"rule": {"type": "every", "frequency": 3, "item": {"screen": "inside"}}},
+        {"rule": {"type": "cycle", "items": [{"screen": "time"}, {"screen": "date"}]}}
+      ]
+    }
+  },
+  "sequence": [
+    {"playlist": "main"}
+  ]
 }
 ```
 
-- A value of **`false`** (or `0`) hides the screen.
-- A value of **`1`** shows the screen on **every** loop.
-- Any value **`>1`** shows the screen once every _N_ loops (e.g., `4` → every fourth pass).
+Key points:
+
+- **`catalog`** holds reusable building blocks (e.g., preset playlists exposed in the admin UI sidebar).
+- **`playlists`** is a dictionary of playlist IDs → definitions. Each playlist contains an ordered `steps` list. Steps may be screen descriptors, nested playlist references, or rule descriptors (`variants`, `cycle`, `every`).
+- **`sequence`** is the top-level playlist order for the display loop. Entries can reference playlists or inline descriptors.
+- Optional **conditions** may be attached to playlists or individual steps:
+
+  ```json
+  {
+    "conditions": {
+      "days_of_week": ["mon", "wed", "fri"],
+      "time_of_day": [{"start": "08:00", "end": "12:00"}]
+    },
+    "playlist": "weather"
+  }
+  ```
+
+  The scheduler automatically skips a step when its conditions are not met.
+
+#### Migrating existing configs
+
+Legacy `sequence` arrays are migrated to v2 automatically on startup. For manual conversions or batch jobs run:
+
+```bash
+python schedule_migrations.py migrate --input screens_config.json --output screens_config.v2.json
+```
+
+This writes a playlist-aware config and validates it using the scheduler parser. The original file is left untouched when `--output` is provided.
+
+#### Admin workflow
+
+- The refreshed admin UI (enabled when `metadata.ui.playlist_admin_enabled` is `true`) provides:
+  - Drag-and-drop sequence editing with playlist cards.
+  - Rule wizards for **frequency**, **cycle**, and **variants** patterns.
+  - Condition editors for days-of-week and time-of-day windows.
+  - A preview drawer that simulates the next N screens via the live scheduler.
+  - Version history with rollback, backed by `config_versions/` plus an SQLite ledger.
+- Set `metadata.ui.playlist_admin_enabled` to `false` (or append `?legacy=1` to the URL) to fall back to the JSON editor.
+- Every save records an audit entry (actor, summary, diff summary) and prunes historical versions beyond the configured retention window.
 
 ---
 
