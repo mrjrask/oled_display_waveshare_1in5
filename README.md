@@ -243,7 +243,7 @@ journalctl -u oled_display-main.service -f
 ## Screenshots & archiving
 
 - Screenshots land in `./screenshots/` when `ENABLE_SCREENSHOTS=True`.
-- **Batch archiving:** once the live folder reaches **500** images, the program moves the **entire batch** into `./screenshot_archive/YYYYMMDD/HHMMSS/` (images only).
+- **Batch archiving:** once the live folder reaches **500** images, the program moves the **entire batch** into `./screenshot_archive/dated_folders/<screen>/YYYYMMDD/HHMMSS/` (images only) so the archive mirrors the folder layout under `./screenshots/`.
 - You will **not** see per‑image pruning logs; instead you’ll see a single archive log like: `🗃️ Archived 500 screenshot(s) → …`
 
 > Tip: videos (if enabled) are written to `screenshots/oled_output.mp4` and aren’t moved by the archiver.
