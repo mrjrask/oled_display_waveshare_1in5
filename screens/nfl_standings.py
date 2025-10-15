@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import csv
 import datetime
+import io
 import logging
 import os
 import re
@@ -26,7 +28,7 @@ from utils import ScreenImage, clear_display, clone_font, load_team_logo, log_ca
 # ─── Constants ────────────────────────────────────────────────────────────────
 TITLE_NFC = "NFC Standings"
 TITLE_AFC = "AFC Standings"
-STANDINGS_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/standings"
+STANDINGS_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/standings.csv"
 REQUEST_TIMEOUT = 10
 CACHE_TTL = 15 * 60  # seconds
 
@@ -199,6 +201,86 @@ def _extract_division_from_text(text: Any) -> str:
         return ""
     conference, direction = match.groups()
     return f"{conference.upper()} {direction.title()}"
+
+
+def _target_season_year(today: Optional[datetime.date] = None) -> int:
+    today = today or datetime.datetime.now().date()
+    if today.month >= 8:
+        return today.year
+    return today.year - 1
+
+
+def _build_standings_from_rows(rows: Iterable[dict], *, conference_key: str) -> Dict[str, List[dict]]:
+    divisions: Dict[str, List[dict]] = {}
+    for row in rows:
+        division = _normalize_division(row.get("division"), conference_key)
+        if not division:
+            continue
+
+        abbr = (row.get("team") or "").strip().upper()
+        if not abbr:
+            continue
+
+        wins = _normalize_int(row.get("wins"))
+        losses = _normalize_int(row.get("losses"))
+        ties = _normalize_int(row.get("ties"))
+        order = _normalize_int(row.get("div_rank"))
+
+        bucket = divisions.setdefault(division, [])
+        entry = {
+            "abbr": abbr,
+            "wins": wins,
+            "losses": losses,
+            "ties": ties,
+            "order": order if order > 0 else len(bucket) + 1,
+        }
+        bucket.append(entry)
+
+    for teams in divisions.values():
+        teams.sort(
+            key=lambda item: (
+                item.get("order", 999),
+                -item.get("wins", 0),
+                item.get("losses", 0),
+                -item.get("ties", 0),
+                item.get("abbr", ""),
+            )
+        )
+
+    return divisions
+
+
+def _parse_csv_standings(text: str, season: int) -> Tuple[dict[str, dict[str, List[dict]]], Optional[int]]:
+    reader = csv.DictReader(io.StringIO(text))
+    rows = [row for row in reader if row]
+
+    standings: dict[str, dict[str, List[dict]]] = {
+        CONFERENCE_NFC_KEY: {},
+        CONFERENCE_AFC_KEY: {},
+    }
+
+    used_season: Optional[int] = None
+    for candidate in (season, season - 1):
+        filtered = [row for row in rows if _normalize_int(row.get("season")) == candidate]
+        if not filtered:
+            continue
+
+        used_season = candidate
+        grouped: Dict[str, List[dict]] = {CONFERENCE_NFC_KEY: [], CONFERENCE_AFC_KEY: []}
+        for row in filtered:
+            conference = (row.get("conf") or "").strip().upper()
+            if conference not in standings:
+                continue
+            grouped[conference].append(row)
+
+        for conference, conference_rows in grouped.items():
+            standings[conference] = _build_standings_from_rows(
+                conference_rows,
+                conference_key=conference,
+            )
+        break
+
+    return standings, used_season
 
 
 def _extract_groups_info(data: Any) -> tuple[str, str]:
@@ -655,7 +737,7 @@ def _fetch_standings_data() -> Tuple[dict[str, dict[str, List[dict]]], Optional[
     try:
         response = _SESSION.get(STANDINGS_URL, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
-        payload = response.json()
+        payload_text = response.text
     except Exception as exc:  # pragma: no cover - network guard
         logging.error("Failed to fetch NFL standings: %s", exc)
         if isinstance(cached, dict):
@@ -671,11 +753,19 @@ def _fetch_standings_data() -> Tuple[dict[str, dict[str, List[dict]]], Optional[
         _STANDINGS_CACHE["message"] = FALLBACK_MESSAGE_UNAVAILABLE
         return standings, FALLBACK_MESSAGE_UNAVAILABLE
 
-    standings = _parse_standings(payload)
+    target_season = _target_season_year()
+    standings, used_season = _parse_csv_standings(payload_text, target_season)
+    if used_season and used_season != target_season:
+        logging.info(
+            "NFL standings using fallback season %s instead of %s",
+            used_season,
+            target_season,
+        )
+
     _STANDINGS_CACHE["data"] = standings
     _STANDINGS_CACHE["timestamp"] = now
     fallback_message = None
-    if not any(standings.values()):
+    if not any(standings.values()) or used_season is None:
         fallback_message = FALLBACK_MESSAGE_UNAVAILABLE
     _STANDINGS_CACHE["message"] = fallback_message
     return standings, fallback_message

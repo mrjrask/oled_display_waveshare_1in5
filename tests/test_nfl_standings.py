@@ -1,203 +1,70 @@
-import pytest
+import textwrap
 
 from screens.nfl_standings import (
     CONFERENCE_AFC_KEY,
     CONFERENCE_NFC_KEY,
-    _parse_standings,
+    _parse_csv_standings,
 )
 
 
-@pytest.fixture
-def summary_payload():
-    return {
-        "standings": {
-            "entries": [
-                {
-                    "team": {
-                        "abbreviation": "BUF",
-                        "standingSummary": "1st in AFC East",
-                    },
-                    "stats": [
-                        {"name": "wins", "value": 11},
-                        {"name": "losses", "value": 6},
-                        {"name": "ties", "value": 0},
-                        {"name": "playoffSeed", "value": 2},
-                    ],
-                },
-                {
-                    "team": {
-                        "abbreviation": "MIA",
-                        "standingSummary": "2nd in AFC East",
-                    },
-                    "stats": [
-                        {"name": "wins", "value": 10},
-                        {"name": "losses", "value": 7},
-                        {"name": "ties", "value": 0},
-                        {"name": "playoffSeed", "value": 5},
-                    ],
-                },
-                {
-                    "team": {
-                        "abbreviation": "PHI",
-                        "standingSummary": "1st in NFC East",
-                    },
-                    "stats": [
-                        {"name": "wins", "value": 12},
-                        {"name": "losses", "value": 5},
-                        {"name": "ties", "value": 0},
-                        {"name": "playoffSeed", "value": 1},
-                    ],
-                },
-            ]
-        }
-    }
+CSV_SAMPLE = textwrap.dedent(
+    """\
+    season,conf,division,team,wins,losses,ties,pct,div_rank,scored,allowed,net,sov,sos,seed,playoff
+    2024,AFC,AFC East,BUF,11,6,0,0.647,1,451,327,124,0.5,0.5,1,
+    2024,AFC,AFC East,MIA,10,7,0,0.588,2,400,350,50,0.4,0.5,5,
+    2024,NFC,NFC North,DET,12,5,0,0.706,1,450,350,100,0.6,0.5,1,
+    2024,NFC,NFC North,GB,9,8,0,0.529,2,400,380,20,0.4,0.5,6,
+    """
+)
 
 
-@pytest.fixture
-def grouped_payload():
-    return {
-        "children": [
-            {
-                "name": "NFL",
-                "standings": {
-                    "entriesByGroup": [
-                        {
-                            "group": {
-                                "name": "AFC East",
-                                "parent": {"name": "American Football Conference"},
-                            },
-                            "entries": [
-                                {
-                                    "team": {"abbreviation": "BUF"},
-                                    "stats": [
-                                        {"name": "wins", "value": 13},
-                                        {"name": "losses", "value": 4},
-                                        {"name": "ties", "value": 0},
-                                        {"name": "playoffSeed", "value": 1},
-                                    ],
-                                },
-                                {
-                                    "team": {"abbreviation": "MIA"},
-                                    "stats": [
-                                        {"name": "wins", "value": 11},
-                                        {"name": "losses", "value": 6},
-                                        {"name": "ties", "value": 0},
-                                        {"name": "playoffSeed", "value": 5},
-                                    ],
-                                },
-                            ],
-                        },
-                        {
-                            "group": {
-                                "name": "NFC North",
-                                "parent": {"name": "National Football Conference"},
-                            },
-                            "entries": [
-                                {
-                                    "team": {
-                                        "abbreviation": "DET",
-                                        "standingSummary": "1st in NFC North",
-                                    },
-                                    "stats": [
-                                        {"name": "wins", "value": 12},
-                                        {"name": "losses", "value": 5},
-                                        {"name": "ties", "value": 0},
-                                        {"name": "playoffSeed", "value": 2},
-                                    ],
-                                },
-                            ],
-                        },
-                    ]
-                },
-            }
-        ]
-    }
+def test_parse_csv_standings_groups_by_conference():
+    standings, used_season = _parse_csv_standings(CSV_SAMPLE, 2024)
 
-
-def test_parse_standings_uses_standing_summary(summary_payload):
-    standings = _parse_standings(summary_payload)
-
-    afc_east = standings[CONFERENCE_AFC_KEY]["AFC East"]
-    nfc_east = standings[CONFERENCE_NFC_KEY]["NFC East"]
-
-    assert [team["abbr"] for team in afc_east] == ["BUF", "MIA"]
-    assert nfc_east[0]["abbr"] == "PHI"
-
-    # Ensure records were carried over
-    assert afc_east[0]["wins"] == 11
-    assert afc_east[1]["losses"] == 7
-
-
-def test_parse_standings_handles_entries_by_group(grouped_payload):
-    standings = _parse_standings(grouped_payload)
+    assert used_season == 2024
 
     afc_east = standings[CONFERENCE_AFC_KEY]["AFC East"]
     nfc_north = standings[CONFERENCE_NFC_KEY]["NFC North"]
 
     assert [team["abbr"] for team in afc_east] == ["BUF", "MIA"]
-    assert afc_east[0]["wins"] == 13
-    assert afc_east[1]["losses"] == 6
+    assert afc_east[0]["wins"] == 11
 
-    assert [team["abbr"] for team in nfc_north] == ["DET"]
-    assert nfc_north[0]["wins"] == 12
-
-
-@pytest.fixture
-def scattered_payload():
-    return {
-        "some": {
-            "deeply": {
-                "nested": [
-                    {
-                        "misc": {
-                            "team": {
-                                "abbreviation": "BUF",
-                                "standingSummary": "1st in AFC East",
-                            },
-                            "stats": [
-                                {"name": "wins", "value": 13},
-                                {"name": "losses", "value": 4},
-                                {"name": "ties", "value": 0},
-                                {"name": "playoffSeed", "value": 1},
-                            ],
-                        },
-                    },
-                    {
-                        "team": {
-                            "abbreviation": "MIA",
-                            "standingSummary": "2nd in AFC East",
-                        },
-                        "stats": [
-                            {"name": "wins", "value": 11},
-                            {"name": "losses", "value": 6},
-                            {"name": "ties", "value": 0},
-                            {"name": "playoffSeed", "value": 5},
-                        ],
-                    },
-                    {
-                        "team": {
-                            "abbreviation": "PHI",
-                            "standingSummary": "1st in NFC East",
-                        },
-                        "stats": [
-                            {"name": "wins", "value": 12},
-                            {"name": "losses", "value": 5},
-                            {"name": "ties", "value": 0},
-                            {"name": "playoffSeed", "value": 2},
-                        ],
-                    },
-                ]
-            }
-        }
-    }
+    assert [team["abbr"] for team in nfc_north] == ["DET", "GB"]
+    assert nfc_north[1]["losses"] == 8
 
 
-def test_parse_standings_falls_back_to_scattered_entries(scattered_payload):
-    standings = _parse_standings(scattered_payload)
+CSV_PREVIOUS_SEASON = textwrap.dedent(
+    """\
+    season,conf,division,team,wins,losses,ties,pct,div_rank,scored,allowed,net,sov,sos,seed,playoff
+    2023,AFC,AFC East,BUF,13,4,0,0.765,1,450,300,150,0.6,0.5,1,
+    2023,AFC,AFC East,MIA,11,6,0,0.647,2,400,350,50,0.5,0.6,5,
+    2023,NFC,NFC East,PHI,12,5,0,0.706,1,420,330,90,0.6,0.6,2,
+    2023,NFC,NFC East,DAL,12,5,0,0.706,2,430,310,120,0.5,0.6,5,
+    """
+)
+
+
+def test_parse_csv_standings_falls_back_to_previous_season():
+    standings, used_season = _parse_csv_standings(CSV_PREVIOUS_SEASON, 2024)
+
+    assert used_season == 2023
 
     afc_east = standings[CONFERENCE_AFC_KEY]["AFC East"]
-    nfc_east = standings[CONFERENCE_NFC_KEY]["NFC East"]
-
     assert [team["abbr"] for team in afc_east] == ["BUF", "MIA"]
-    assert afc_east[0]["wins"] == 13
-    assert nfc_east[0]["abbr"] == "PHI"
+
+
+CSV_NO_MATCH = textwrap.dedent(
+    """\
+    season,conf,division,team,wins,losses,ties,pct,div_rank,scored,allowed,net,sov,sos,seed,playoff
+    2022,AFC,AFC West,DEN,5,12,0,0.294,4,287,359,-72,0.3,0.5,,
+    2022,NFC,NFC West,SF,13,4,0,0.765,1,450,300,150,0.6,0.6,2,
+    """
+)
+
+
+def test_parse_csv_standings_returns_empty_when_no_data():
+    standings, used_season = _parse_csv_standings(CSV_NO_MATCH, 2024)
+
+    assert used_season is None
+    assert standings[CONFERENCE_AFC_KEY] == {}
+    assert standings[CONFERENCE_NFC_KEY] == {}
