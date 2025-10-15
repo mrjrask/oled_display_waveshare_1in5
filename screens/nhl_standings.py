@@ -8,7 +8,7 @@ import os
 import socket
 import time
 from collections.abc import Iterable
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from PIL import Image, ImageDraw
 
@@ -55,7 +55,6 @@ DIVISION_FONT = clone_font(FONT_TITLE_SPORTS, 14)
 COLUMN_FONT = clone_font(FONT_STATUS, 13)
 COLUMN_FONT_POINTS = clone_font(FONT_STATUS, 9)
 ROW_FONT = clone_font(FONT_STATUS, 14)
-OVERVIEW_LABEL_FONT = clone_font(FONT_STATUS, 10)
 
 OVERVIEW_TITLE = "NHL Standings Overview"
 OVERVIEW_DIVISIONS = [
@@ -65,11 +64,13 @@ OVERVIEW_DIVISIONS = [
     (CONFERENCE_WEST_KEY, "Pacific", "Pacific"),
 ]
 OVERVIEW_MARGIN_X = 4
-OVERVIEW_TITLE_MARGIN_BOTTOM = 4
-OVERVIEW_LABEL_GAP = 2
+OVERVIEW_TITLE_MARGIN_BOTTOM = 6
 OVERVIEW_BOTTOM_MARGIN = 2
-OVERVIEW_MAX_LOGO_HEIGHT = 24
-OVERVIEW_LOGO_PADDING = 2
+OVERVIEW_MIN_LOGO_HEIGHT = 18
+OVERVIEW_MAX_LOGO_HEIGHT = 36
+OVERVIEW_LOGO_PADDING = 4
+OVERVIEW_LOGO_OVERLAP = 6
+OVERVIEW_DROP_STEPS = 11
 
 
 WHITE = (255, 255, 255)
@@ -695,17 +696,21 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
     return img
 
 
-def _render_overview(divisions: List[tuple[str, List[dict]]]) -> Image.Image:
-    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
-    draw = ImageDraw.Draw(img)
+Placement = Tuple[str, Image.Image, int, int]
+
+
+def _overview_layout(
+    divisions: Sequence[tuple[str, List[dict]]]
+) -> tuple[Image.Image, List[float], float, float, int, int]:
+    base = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    draw = ImageDraw.Draw(base)
 
     y = TITLE_MARGIN_TOP
     y += _draw_centered_text(draw, OVERVIEW_TITLE, TITLE_FONT, y)
     y += OVERVIEW_TITLE_MARGIN_BOTTOM
 
-    label_height = _text_size("Metro", OVERVIEW_LABEL_FONT)[1]
-    logos_top = y + label_height + OVERVIEW_LABEL_GAP
-    available_height = max(0, HEIGHT - logos_top - OVERVIEW_BOTTOM_MARGIN)
+    logos_top = y
+    available_height = max(1.0, HEIGHT - logos_top - OVERVIEW_BOTTOM_MARGIN)
 
     max_rows = max((len(teams) for _, teams in divisions), default=0)
     if max_rows <= 0:
@@ -714,33 +719,127 @@ def _render_overview(divisions: List[tuple[str, List[dict]]]) -> Image.Image:
     col_count = max(1, len(divisions))
     available_width = max(1.0, WIDTH - 2 * OVERVIEW_MARGIN_X)
     col_width = available_width / col_count
+    col_centers = [OVERVIEW_MARGIN_X + col_width * (idx + 0.5) for idx in range(col_count)]
+
     cell_height = available_height / max_rows if max_rows else available_height
+    logo_width_limit = max(6, int(col_width - OVERVIEW_LOGO_PADDING))
+    logo_base_height = cell_height + OVERVIEW_LOGO_OVERLAP
+    logo_target_height = int(
+        min(
+            OVERVIEW_MAX_LOGO_HEIGHT,
+            max(OVERVIEW_MIN_LOGO_HEIGHT, logo_base_height),
+            logo_width_limit,
+        )
+    )
+    logo_target_height = max(6, logo_target_height)
 
-    logo_from_height = max(6, int(cell_height) - OVERVIEW_LOGO_PADDING)
-    logo_from_width = max(6, int(col_width) - OVERVIEW_LOGO_PADDING)
-    logo_target_height = max(6, min(OVERVIEW_MAX_LOGO_HEIGHT, logo_from_height, logo_from_width))
+    return base, col_centers, logos_top, cell_height, logo_target_height, max_rows
 
-    for idx, (label, teams) in enumerate(divisions):
-        col_left = OVERVIEW_MARGIN_X + idx * col_width
-        col_center = col_left + col_width / 2
 
-        lw, lh = _text_size(label, OVERVIEW_LABEL_FONT)
-        label_y = y + (label_height - lh) // 2 if label_height > 0 else y
-        draw.text((int(col_center - lw / 2), int(label_y)), label, font=OVERVIEW_LABEL_FONT, fill=WHITE)
+def _overview_logo_position(
+    col_idx: int,
+    row_idx: int,
+    col_centers: Sequence[float],
+    logos_top: float,
+    cell_height: float,
+    logo: Image.Image,
+) -> tuple[int, int]:
+    col_center = col_centers[col_idx]
+    y_center = logos_top + cell_height * (row_idx + 0.5)
+    x0 = int(col_center - logo.width / 2)
+    y0 = int(y_center - logo.height / 2)
+    return x0, y0
 
-        for row in range(max_rows):
-            y_center = logos_top + cell_height * (row + 0.5)
-            logo = None
-            if row < len(teams):
-                abbr = teams[row].get("abbr") or ""
-                logo = _load_overview_logo(abbr, logo_target_height)
+
+def _build_overview_rows(
+    divisions: Sequence[tuple[str, List[dict]]],
+    col_centers: Sequence[float],
+    logos_top: float,
+    cell_height: float,
+    logo_height: int,
+    max_rows: int,
+) -> List[List[Placement]]:
+    rows: List[List[Placement]] = [[] for _ in range(max_rows)]
+
+    for col_idx, (_, teams) in enumerate(divisions):
+        limited = teams[:max_rows]
+        for row_idx, team in enumerate(limited):
+            abbr = (team.get("abbr") or "").upper()
+            if not abbr:
+                continue
+            logo = _load_overview_logo(abbr, logo_height)
             if not logo:
                 continue
-            x = int(col_center - logo.width / 2)
-            y0 = int(y_center - logo.height / 2)
-            img.paste(logo, (x, y0), logo)
+            x0, y0 = _overview_logo_position(col_idx, row_idx, col_centers, logos_top, cell_height, logo)
+            rows[row_idx].append((abbr, logo, x0, y0))
 
-    return img
+    return rows
+
+
+def _ensure_blackhawks_top_layer(canvas: Image.Image, placements: Sequence[Placement]) -> None:
+    for abbr, logo, x0, y0 in placements:
+        if logo and abbr.upper() == "CHI":
+            canvas.paste(logo, (x0, y0), logo)
+
+
+def _compose_overview_image(
+    base: Image.Image, row_positions: Sequence[Sequence[Placement]]
+) -> tuple[Image.Image, List[Placement]]:
+    final = base.copy()
+    placements: List[Placement] = []
+
+    for row in reversed(row_positions):
+        for placement in row:
+            abbr, logo, x0, y0 = placement
+            final.paste(logo, (x0, y0), logo)
+            placements.append(placement)
+
+    _ensure_blackhawks_top_layer(final, placements)
+    return final, placements
+
+
+def _animate_overview_drop(
+    display, base: Image.Image, row_positions: Sequence[Sequence[Placement]]
+) -> None:
+    has_logos = any(row for row in row_positions)
+    if not has_logos:
+        return
+
+    placed: List[Placement] = []
+    for rank in range(len(row_positions) - 1, -1, -1):
+        drops = row_positions[rank]
+        if not drops:
+            continue
+
+        for step in range(OVERVIEW_DROP_STEPS):
+            frame = base.copy()
+            dynamic: List[Placement] = []
+
+            for abbr, logo, x0, y0 in placed:
+                frame.paste(logo, (x0, y0), logo)
+
+            frac = step / (OVERVIEW_DROP_STEPS - 1) if OVERVIEW_DROP_STEPS > 1 else 1.0
+            for abbr, logo, x0, y_target in drops:
+                start_y = -logo.height
+                y_pos = int(start_y + (y_target - start_y) * frac)
+                if y_pos > y_target:
+                    y_pos = y_target
+                frame.paste(logo, (x0, y_pos), logo)
+                dynamic.append((abbr, logo, x0, y_pos))
+
+            _ensure_blackhawks_top_layer(frame, [*placed, *dynamic])
+            display.image(frame)
+            if hasattr(display, "show"):
+                display.show()
+            time.sleep(SCROLL_DELAY)
+
+        placed.extend(drops)
+
+
+def _prepare_overview(divisions: List[tuple[str, List[dict]]]) -> tuple[Image.Image, List[List[Placement]]]:
+    base, col_centers, logos_top, cell_height, logo_height, max_rows = _overview_layout(divisions)
+    row_positions = _build_overview_rows(divisions, col_centers, logos_top, cell_height, logo_height, max_rows)
+    return base, row_positions
 
 
 def _render_empty(title: str) -> Image.Image:
@@ -788,10 +887,16 @@ def draw_nhl_standings_overview(display, transition: bool = False) -> ScreenImag
         display.image(img)
         return ScreenImage(img, displayed=True)
 
-    img = _render_overview(divisions)
+    base, row_positions = _prepare_overview(divisions)
+    final_img, _ = _compose_overview_image(base, row_positions)
+
     clear_display(display)
-    display.image(img)
-    return ScreenImage(img, displayed=True)
+    _animate_overview_drop(display, base, row_positions)
+    display.image(final_img)
+    if hasattr(display, "show"):
+        display.show()
+
+    return ScreenImage(final_img, displayed=True)
 
 
 @log_call
