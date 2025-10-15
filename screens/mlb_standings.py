@@ -45,7 +45,11 @@ LEAGUE_DIVISION_IDS: Dict[int, Dict[str, int]] = {
     103: {"East": 201, "Central": 202, "West": 200},  # American League
 }
 
-LOGOS_DIR = os.path.join(os.path.dirname(__file__), "images", "mlb")
+# Logos live in the shared images directory alongside config.py. Using the
+# config.IMAGES_DIR constant keeps the standings screen aligned with the other
+# MLB screens (schedule, scoreboard, etc.) and avoids looking for a nonexistent
+# ./screens/images/mlb folder.
+LOGOS_DIR = os.path.join(config.IMAGES_DIR, "mlb")
 TIMEOUT   = 10
 
 
