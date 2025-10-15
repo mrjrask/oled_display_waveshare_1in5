@@ -112,6 +112,8 @@ from screens.nhl_standings import (
 )
 from screens.nfl_scoreboard import draw_nfl_scoreboard
 from screens.nfl_standings import (
+    draw_nfl_overview_afc,
+    draw_nfl_overview_nfc,
     draw_nfl_standings_afc,
     draw_nfl_standings_nfc,
 )
@@ -541,6 +543,8 @@ def build_screens():
         ("bears next",   lambda: show_bears_next_game(display, transition=True)),
         ("nfl logo",     (lambda: show_logo(nfl_logo)) if nfl_logo else None),
         ("NFL Scoreboard", lambda: draw_nfl_scoreboard(display, transition=True)),
+        ("NFL Overview NFC", lambda: draw_nfl_overview_nfc(display, transition=True)),
+        ("NFL Overview AFC", lambda: draw_nfl_overview_afc(display, transition=True)),
         ("NFL Standings NFC", lambda: draw_nfl_standings_nfc(display, transition=True)),
         ("NFL Standings AFC", lambda: draw_nfl_standings_afc(display, transition=True)),
     ]
