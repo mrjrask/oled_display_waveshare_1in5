@@ -42,6 +42,16 @@ CONFERENCE_AFC_KEY = "AFC"
 
 LOGO_DIR = os.path.join(IMAGES_DIR, "nfl")
 LOGO_HEIGHT = 22
+
+# Overview animation geometry
+OVERVIEW_LOGO_HEIGHT = 32
+OVERVIEW_VERTICAL_STEP = 22
+OVERVIEW_COLUMN_MARGIN = 2
+OVERVIEW_DROP_MARGIN = 6
+OVERVIEW_DROP_STEPS = 12
+OVERVIEW_FRAME_DELAY = 0.05
+OVERVIEW_PAUSE_END = 0.5
+
 LEFT_MARGIN = 4
 ROW_PADDING = 3
 ROW_SPACING = 2
@@ -69,6 +79,7 @@ _MEASURE_DRAW = ImageDraw.Draw(_MEASURE_IMG)
 
 _STANDINGS_CACHE: Dict[str, Any] = {"timestamp": 0.0, "data": None, "message": None}
 _LOGO_CACHE: Dict[str, Optional[Image.Image]] = {}
+_OVERVIEW_LOGO_CACHE: Dict[str, Optional[Image.Image]] = {}
 
 _CONFERENCE_ALIASES = {
     "american football conference": CONFERENCE_AFC_KEY,
@@ -112,28 +123,39 @@ DIVISION_TEXT_HEIGHT = _text_size("NFC North", DIVISION_FONT)[1]
 TITLE_TEXT_HEIGHT = _text_size(TITLE_NFC, TITLE_FONT)[1]
 
 
-def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
+def _load_logo_for_height(
+    abbr: str, height: int, cache: Dict[str, Optional[Image.Image]]
+) -> Optional[Image.Image]:
     key = (abbr or "").strip()
     if not key:
         return None
+
     cache_key = key.upper()
-    if cache_key in _LOGO_CACHE:
-        return _LOGO_CACHE[cache_key]
+    if cache_key in cache:
+        return cache[cache_key]
 
     candidates = [cache_key, cache_key.lower(), cache_key.title()]
     for candidate in candidates:
         path = os.path.join(LOGO_DIR, f"{candidate}.png")
         if os.path.exists(path):
             try:
-                logo = load_team_logo(LOGO_DIR, candidate, height=LOGO_HEIGHT)
+                logo = load_team_logo(LOGO_DIR, candidate, height=height)
             except Exception as exc:  # pragma: no cover - defensive guard
                 logging.debug("NFL logo load failed for %s: %s", candidate, exc)
                 logo = None
-            _LOGO_CACHE[cache_key] = logo
+            cache[cache_key] = logo
             return logo
 
-    _LOGO_CACHE[cache_key] = None
+    cache[cache_key] = None
     return None
+
+
+def _load_logo_cached(abbr: str) -> Optional[Image.Image]:
+    return _load_logo_for_height(abbr, LOGO_HEIGHT, _LOGO_CACHE)
+
+
+def _load_overview_logo(abbr: str) -> Optional[Image.Image]:
+    return _load_logo_for_height(abbr, OVERVIEW_LOGO_HEIGHT, _OVERVIEW_LOGO_CACHE)
 
 
 def _normalize_int(value: Any) -> int:
@@ -896,6 +918,224 @@ def _render_conference(title: str, division_order: List[str], standings: Dict[st
     return img
 
 
+def _overview_header_frame(title: str) -> Tuple[Image.Image, int]:
+    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    draw = ImageDraw.Draw(img)
+    try:
+        l, t, r, b = draw.textbbox((0, 0), title, font=TITLE_FONT)
+        tw, th = r - l, b - t
+        tx = (WIDTH - tw) // 2 - l
+        ty = TITLE_MARGIN_TOP - t
+    except Exception:  # pragma: no cover - PIL fallback
+        tw, th = draw.textsize(title, font=TITLE_FONT)
+        tx = (WIDTH - tw) // 2
+        ty = TITLE_MARGIN_TOP
+    draw.text((tx, ty), title, font=TITLE_FONT, fill=WHITE)
+    content_top = TITLE_MARGIN_TOP + TITLE_TEXT_HEIGHT + TITLE_MARGIN_BOTTOM
+    return img, content_top
+
+
+def _paste_overview_logos(canvas: Image.Image, placements: Iterable[Dict[str, Any]]):
+    ordered = sorted(
+        (
+            placement
+            for placement in placements
+            if placement and placement.get("logo") is not None
+        ),
+        key=lambda item: (
+            1 if item.get("abbr", "").upper() == "CHI" else 0,
+            -int(item.get("y", 0)),
+        ),
+    )
+    for placement in ordered:
+        logo = placement["logo"]
+        x = int(placement.get("x", 0))
+        y = int(placement.get("y", 0))
+        canvas.paste(logo, (x, y), logo)
+
+
+def _prepare_overview_columns(
+    division_order: List[str],
+    standings: Dict[str, List[dict]],
+    content_top: int,
+) -> Tuple[List[Dict[int, Optional[Dict[str, Any]]]], int]:
+    column_count = max(1, len(division_order))
+    column_width = WIDTH / column_count
+    available_height = max(0, HEIGHT - content_top)
+
+    columns: List[Dict[int, Optional[Dict[str, Any]]]] = []
+    max_rows = 0
+
+    for idx, division in enumerate(division_order):
+        teams = standings.get(division, []) or []
+        team_count = len(teams)
+        max_rows = max(max_rows, team_count)
+
+        stack_height = (
+            OVERVIEW_LOGO_HEIGHT + (team_count - 1) * OVERVIEW_VERTICAL_STEP
+            if team_count
+            else OVERVIEW_LOGO_HEIGHT
+        )
+        top_offset = 0
+        if available_height > stack_height:
+            top_offset = (available_height - stack_height) // 2
+        start_center = content_top + top_offset + OVERVIEW_LOGO_HEIGHT // 2
+        col_center = int((idx + 0.5) * column_width)
+        width_limit = max(0, int(column_width - 2 * OVERVIEW_COLUMN_MARGIN))
+
+        column: Dict[int, Optional[Dict[str, Any]]] = {}
+        for rank, team in enumerate(teams):
+            abbr = team.get("abbr", "")
+            logo_source = _load_overview_logo(abbr)
+            if not logo_source:
+                column[rank] = None
+                continue
+
+            logo = logo_source.copy()
+            if width_limit and logo.width > width_limit:
+                ratio = width_limit / float(logo.width)
+                new_size = (
+                    max(1, int(logo.width * ratio)),
+                    max(1, int(logo.height * ratio)),
+                )
+                logo = logo.resize(new_size, Image.LANCZOS)
+
+            center_y = start_center + rank * OVERVIEW_VERTICAL_STEP
+            y_target = int(center_y - logo.height / 2)
+            x_target = int(col_center - logo.width / 2)
+            drop_start = min(-logo.height, content_top - logo.height - OVERVIEW_DROP_MARGIN)
+
+            column[rank] = {
+                "logo": logo,
+                "x": x_target,
+                "y": y_target,
+                "abbr": abbr,
+                "drop_start": drop_start,
+            }
+
+        columns.append(column)
+
+    return columns, max_rows
+
+
+def _render_overview(
+    display,
+    title: str,
+    division_order: List[str],
+    standings: Dict[str, List[dict]],
+    transition: bool,
+    fallback_message: Optional[str],
+) -> ScreenImage:
+    if not any(standings.get(division) for division in division_order):
+        return _render_overview_fallback(display, title, fallback_message, transition)
+
+    header, content_top = _overview_header_frame(title)
+    columns, max_rows = _prepare_overview_columns(division_order, standings, content_top)
+
+    if max_rows == 0:
+        return _render_overview_fallback(display, title, fallback_message, transition)
+
+    for rank in range(max_rows - 1, -1, -1):
+        placed: List[Dict[str, Any]] = []
+        for column in columns:
+            for row, placement in column.items():
+                if placement and row > rank:
+                    placed.append(placement)
+
+        base = header.copy()
+        _paste_overview_logos(base, placed)
+
+        drops: List[Dict[str, Any]] = []
+        for column in columns:
+            placement = column.get(rank)
+            if placement:
+                drops.append(placement)
+
+        if not drops:
+            continue
+
+        steps = max(2, OVERVIEW_DROP_STEPS)
+        for step in range(steps):
+            frac = step / (steps - 1)
+            frame = base.copy()
+            animated: List[Dict[str, Any]] = []
+            for placement in drops:
+                start_y = placement["drop_start"]
+                target_y = placement["y"]
+                y_pos = int(start_y + (target_y - start_y) * frac)
+                if y_pos > target_y:
+                    y_pos = target_y
+                animated.append(
+                    {
+                        "logo": placement["logo"],
+                        "x": placement["x"],
+                        "y": y_pos,
+                        "abbr": placement.get("abbr", ""),
+                    }
+                )
+
+            _paste_overview_logos(frame, animated)
+            display.image(frame)
+            display.show()
+            time.sleep(OVERVIEW_FRAME_DELAY)
+
+    final = header.copy()
+    all_placements: List[Dict[str, Any]] = []
+    for column in columns:
+        for placement in column.values():
+            if placement:
+                all_placements.append(placement)
+    _paste_overview_logos(final, all_placements)
+
+    display.image(final)
+    display.show()
+    time.sleep(OVERVIEW_PAUSE_END)
+    return ScreenImage(final, displayed=True)
+
+
+def _render_overview_fallback(
+    display,
+    title: str,
+    fallback_message: Optional[str],
+    transition: bool,
+) -> ScreenImage:
+    clear_display(display)
+    img = Image.new("RGB", (WIDTH, HEIGHT), "black")
+    draw = ImageDraw.Draw(img)
+
+    message = fallback_message or "No standings"
+
+    try:
+        l, t, r, b = draw.textbbox((0, 0), title, font=TITLE_FONT)
+        tw, th = r - l, b - t
+        tx = (WIDTH - tw) // 2 - l
+        ty = 0 - t
+    except Exception:  # pragma: no cover - PIL fallback
+        tw, th = draw.textsize(title, font=TITLE_FONT)
+        tx = (WIDTH - tw) // 2
+        ty = 0
+    draw.text((tx, ty), title, font=TITLE_FONT, fill=WHITE)
+
+    try:
+        l, t, r, b = draw.textbbox((0, 0), message, font=ROW_FONT)
+        tw, th = r - l, b - t
+        mx = (WIDTH - tw) // 2 - l
+        my = (HEIGHT - th) // 2 - t
+    except Exception:  # pragma: no cover - PIL fallback
+        tw, th = draw.textsize(message, font=ROW_FONT)
+        mx = (WIDTH - tw) // 2
+        my = (HEIGHT - th) // 2
+    draw.text((mx, my), message, font=ROW_FONT, fill=WHITE)
+
+    if transition:
+        return ScreenImage(img, displayed=False)
+
+    display.image(img)
+    display.show()
+    time.sleep(SCROLL_PAUSE_BOTTOM)
+    return ScreenImage(img, displayed=True)
+
+
 def _scroll_display(display, full_img: Image.Image):
     if full_img.height <= HEIGHT:
         display.image(full_img)
@@ -970,6 +1210,34 @@ def _render_and_display(
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
+@log_call
+def draw_nfl_overview_nfc(display, transition: bool = False) -> ScreenImage:
+    standings_by_conf, fallback_message = _fetch_standings_data()
+    conference = standings_by_conf.get(CONFERENCE_NFC_KEY, {})
+    return _render_overview(
+        display,
+        "NFC Overview",
+        DIVISION_ORDER_NFC,
+        conference,
+        transition,
+        fallback_message,
+    )
+
+
+@log_call
+def draw_nfl_overview_afc(display, transition: bool = False) -> ScreenImage:
+    standings_by_conf, fallback_message = _fetch_standings_data()
+    conference = standings_by_conf.get(CONFERENCE_AFC_KEY, {})
+    return _render_overview(
+        display,
+        "AFC Overview",
+        DIVISION_ORDER_AFC,
+        conference,
+        transition,
+        fallback_message,
+    )
+
+
 @log_call
 def draw_nfl_standings_nfc(display, transition: bool = False) -> ScreenImage:
     standings_by_conf, fallback_message = _fetch_standings_data()
