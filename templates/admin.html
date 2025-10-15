@@ -464,8 +464,11 @@
     window.BOOTSTRAP = {{ bootstrap | safe }};
   </script>
   <script>
+    const supportsStructuredClone = typeof structuredClone === 'function';
     const state = {
-      config: structuredClone ? structuredClone(window.BOOTSTRAP.config) : JSON.parse(JSON.stringify(window.BOOTSTRAP.config)),
+      config: supportsStructuredClone
+        ? structuredClone(window.BOOTSTRAP.config)
+        : JSON.parse(JSON.stringify(window.BOOTSTRAP.config)),
       screens: window.BOOTSTRAP.screens || [],
       validation: window.BOOTSTRAP.validation || [],
       migrated: Boolean(window.BOOTSTRAP.migrated),
