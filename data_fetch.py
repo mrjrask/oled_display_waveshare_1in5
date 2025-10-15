@@ -48,6 +48,9 @@ def fetch_weather():
     """
     global _last_owm_429
     now = datetime.datetime.now()
+    if not OWM_API_KEY:
+        logging.warning("OpenWeatherMap API key missing; using fallback provider")
+        return fetch_weather_fallback()
     # If we got a 429 within the last 2 hours, skip OWM and fallback
     if _last_owm_429 and (now - _last_owm_429) < datetime.timedelta(hours=2):
         logging.warning("Skipping OpenWeatherMap due to recent 429; using fallback")
