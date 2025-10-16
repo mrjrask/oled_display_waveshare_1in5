@@ -1,241 +1,135 @@
 #!/usr/bin/env python3
-"""Admin service providing playlist-aware configuration tooling."""
+"""Minimal admin service that surfaces the latest screenshots per screen."""
 from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Tuple
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, List, Optional
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template
 
-from config_store import ConfigStore
 from schedule import build_scheduler
-from schedule_migrations import MigrationError, migrate_config
-from screens_catalog import SCREEN_IDS
-
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
+SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 app = Flask(__name__, static_folder="screenshots", static_url_path="/screenshots")
 
-store = ConfigStore(CONFIG_PATH)
+
+@dataclass
+class ScreenInfo:
+    id: str
+    frequency: int
+    last_screenshot: Optional[str]
+    last_captured: Optional[str]
 
 
-class ConfigValidationError(ValueError):
-    """Raised when a configuration payload fails validation."""
+def _sanitize_directory_name(name: str) -> str:
+    safe = name.strip().replace("/", "-").replace("\\", "-")
+    safe = "".join(ch for ch in safe if ch.isalnum() or ch in (" ", "-", "_"))
+    return safe or "Screens"
 
 
-def _default_config() -> Dict[str, Any]:
-    return {
-        "version": 2,
-        "catalog": {"presets": {}},
-        "metadata": {"created": "auto"},
-        "playlists": {
-            "main": {
-                "label": "Default rotation",
-                "steps": [
-                    {"screen": "date"},
-                    {"screen": "time"},
-                ],
-            }
-        },
-        "sequence": [{"playlist": "main"}],
-    }
+def _latest_screenshot(screen_id: str) -> Optional[tuple[str, datetime]]:
+    folder = os.path.join(SCREENSHOT_DIR, _sanitize_directory_name(screen_id))
+    if not os.path.isdir(folder):
+        return None
+
+    latest_path: Optional[str] = None
+    latest_mtime: float = -1.0
+
+    for entry in os.scandir(folder):
+        if not entry.is_file():
+            continue
+        _, ext = os.path.splitext(entry.name)
+        if ext.lower() not in ALLOWED_EXTENSIONS:
+            continue
+        mtime = entry.stat().st_mtime
+        if mtime > latest_mtime:
+            latest_mtime = mtime
+            rel_path = os.path.join(os.path.basename(folder), entry.name)
+            latest_path = rel_path.replace(os.sep, "/")
+
+    if latest_path is None:
+        return None
+
+    captured = datetime.fromtimestamp(latest_mtime)
+    return latest_path, captured
 
 
-def _load_active_config() -> Tuple[Dict[str, Any], List[str], bool]:
-    raw = store.load()
-    migrated = False
-    if not raw:
-        config = _default_config()
-        store.save(config, actor="system", summary="Seed default configuration")
-        raw = config
-        migrated = True
-
+def _load_config() -> Dict[str, Dict[str, int]]:
     try:
-        result = migrate_config(raw, source=CONFIG_PATH)
-    except MigrationError as exc:  # pragma: no cover - indicates corrupt file
-        raise ConfigValidationError(str(exc)) from exc
+        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {"screens": {}}
 
-    config = result.config
-    if result.migrated:
-        store.save(
-            config,
-            actor="system",
-            summary="Automated migration to schema v2",
-            metadata={"reason": "auto_migration"},
-        )
-        migrated = True
-
-    errors = _validate_config(config)
-    return config, errors, migrated
+    if not isinstance(data, dict):
+        raise ValueError("Configuration must be a JSON object")
+    screens = data.get("screens")
+    if not isinstance(screens, dict):
+        raise ValueError("Configuration must contain a 'screens' mapping")
+    return {"screens": screens}
 
 
-def _validate_config(config: Dict[str, Any]) -> List[str]:
-    errors: List[str] = []
-    try:
-        build_scheduler(config)
-    except ValueError as exc:
-        errors.append(str(exc))
-    return errors
+def _collect_screen_info() -> List[ScreenInfo]:
+    config = _load_config()
+    # Validate the configuration by attempting to build a scheduler.
+    build_scheduler(config)
 
-
-def _normalise_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(payload, dict):
-        raise ConfigValidationError("Configuration payload must be a JSON object")
-
-    config: Dict[str, Any] = {}
-    config["version"] = payload.get("version", 2)
-    if config["version"] != 2:
-        raise ConfigValidationError("Configuration must declare version 2")
-
-    catalog = payload.get("catalog")
-    config["catalog"] = catalog if isinstance(catalog, dict) else {"presets": {}}
-
-    metadata = payload.get("metadata")
-    config["metadata"] = metadata if isinstance(metadata, dict) else {}
-
-    playlists = payload.get("playlists") or {}
-    if not isinstance(playlists, dict):
-        raise ConfigValidationError("playlists must be an object")
-    config["playlists"] = playlists
-
-    sequence = payload.get("sequence")
-    if not isinstance(sequence, list) or not sequence:
-        raise ConfigValidationError("sequence must be a non-empty list")
-    config["sequence"] = sequence
-
-    return config
-
-
-def _playlist_ui_enabled(config: Dict[str, Any]) -> bool:
-    metadata = config.get("metadata")
-    if isinstance(metadata, dict):
-        ui_meta = metadata.get("ui")
-        if isinstance(ui_meta, dict) and ui_meta.get("playlist_admin_enabled") is False:
-            return False
-    return True
-
-
-def _catalog_payload() -> Dict[str, Any]:
-    config, errors, migrated = _load_active_config()
-    versions = store.list_versions(limit=20)
-    return {
-        "config": config,
-        "screens": sorted(SCREEN_IDS),
-        "validation": errors,
-        "migrated": migrated,
-        "versions": versions,
-        "latest_version_id": store.latest_version_id(),
-    }
+    screens: List[ScreenInfo] = []
+    for screen_id, freq in config["screens"].items():
+        try:
+            frequency = int(freq)
+        except (TypeError, ValueError):
+            frequency = 0
+        latest = _latest_screenshot(screen_id)
+        if latest is None:
+            screens.append(ScreenInfo(screen_id, frequency, None, None))
+        else:
+            rel_path, captured = latest
+            screens.append(
+                ScreenInfo(
+                    screen_id,
+                    frequency,
+                    rel_path,
+                    captured.isoformat(timespec="seconds"),
+                )
+            )
+    return screens
 
 
 @app.route("/")
 def index() -> str:
-    payload = _catalog_payload()
-    use_playlist_ui = _playlist_ui_enabled(payload["config"]) and request.args.get("legacy") != "1"
-    template = "admin.html" if use_playlist_ui else "admin_legacy.html"
-    return render_template(
-        template,
-        bootstrap=payload,
-        config_json=json.dumps(payload["config"], indent=2),
-    )
-
-
-@app.route("/api/catalog")
-def api_catalog():
     try:
-        payload = _catalog_payload()
-    except ConfigValidationError as exc:
+        screens = _collect_screen_info()
+        error = None
+    except ValueError as exc:
+        screens = []
+        error = str(exc)
+    return render_template("admin.html", screens=screens, error=error)
+
+
+@app.route("/api/screens")
+def api_screens():
+    try:
+        screens = _collect_screen_info()
+        return jsonify(status="ok", screens=[screen.__dict__ for screen in screens])
+    except ValueError as exc:
         return jsonify(status="error", message=str(exc)), 500
-    return jsonify(status="ok", **payload)
 
 
 @app.route("/api/config")
 def api_config():
-    return api_catalog()
-
-
-@app.route("/save_config", methods=["POST"])
-def save_config():
-    incoming = request.get_json() or {}
-    actor = incoming.get("actor") or request.headers.get("X-User", "admin")
-    summary = incoming.get("summary")
-    payload = incoming.get("config") if "config" in incoming else incoming
-
     try:
-        config = _normalise_payload(payload)
-        build_scheduler(config)
-    except (ConfigValidationError, ValueError) as exc:
-        return jsonify(status="error", message=str(exc)), 400
-
-    version_id = store.save(config, actor=actor, summary=summary or None)
-    response = _catalog_payload()
-    response.update({"status": "success", "version_id": version_id})
-    return jsonify(response)
-
-
-@app.route("/preview", methods=["POST"])
-def preview():
-    data = request.get_json(silent=True) or {}
-    count = data.get("count", 20)
-    try:
-        count = max(1, min(int(count), 200))
-    except (TypeError, ValueError):
-        return jsonify(status="error", message="count must be an integer"), 400
-
-    payload = data.get("config")
-    if payload is None:
-        payload = _load_active_config()[0]
-
-    try:
-        config = _normalise_payload(payload)
-        scheduler = build_scheduler(config)
-    except (ConfigValidationError, ValueError) as exc:
-        return jsonify(status="error", message=str(exc)), 400
-
-    from screens.registry import ScreenDefinition
-
-    registry = {
-        sid: ScreenDefinition(id=sid, render=lambda sid=sid: sid, available=True)
-        for sid in SCREEN_IDS
-    }
-
-    seen: List[str] = []
-    for _ in range(count * 2):
-        entry = scheduler.next_available(registry)
-        if entry is None:
-            continue
-        seen.append(entry.id)
-        if len(seen) >= count:
-            break
-
-    return jsonify(status="ok", preview=seen)
-
-
-@app.route("/config/rollback", methods=["POST"])
-def rollback_config():
-    data = request.get_json() or {}
-    version_id = data.get("version_id")
-    actor = data.get("actor") or request.headers.get("X-User", "admin")
-    if version_id is None:
-        return jsonify(status="error", message="version_id is required"), 400
-    try:
-        version_id = int(version_id)
-    except (TypeError, ValueError):
-        return jsonify(status="error", message="version_id must be an integer"), 400
-
-    try:
-        store.rollback(version_id, actor=actor)
-    except KeyError:
-        return jsonify(status="error", message="Unknown version"), 404
-    except Exception as exc:  # pragma: no cover - unexpected failure
+        config = _load_config()
+        return jsonify(status="ok", config=config)
+    except ValueError as exc:
         return jsonify(status="error", message=str(exc)), 500
-
-    payload = _catalog_payload()
-    payload.update({"status": "success", "rolled_back_to": version_id})
-    return jsonify(payload)
 
 
 if __name__ == "__main__":  # pragma: no cover
