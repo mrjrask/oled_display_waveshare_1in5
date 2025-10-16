@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -18,6 +20,9 @@ SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 app = Flask(__name__, static_folder="screenshots", static_url_path="/screenshots")
+_logger = logging.getLogger(__name__)
+_auto_render_lock = threading.Lock()
+_auto_render_done = False
 
 
 @dataclass
@@ -101,6 +106,45 @@ def _collect_screen_info() -> List[ScreenInfo]:
                 )
             )
     return screens
+
+
+def _run_startup_renderer() -> None:
+    """Render the latest screenshots when the service starts."""
+
+    if app.config.get("TESTING"):
+        return
+
+    if os.environ.get("ADMIN_DISABLE_AUTO_RENDER") == "1":
+        _logger.info("Skipping automatic screen render due to environment override.")
+        return
+
+    try:
+        from render_all_screens import render_all_screens as _render_all_screens
+    except Exception as exc:  # pragma: no cover - import errors are unexpected
+        _logger.warning("Initial render unavailable: %s", exc)
+        return
+
+    try:
+        _logger.info("Rendering all screens to refresh admin gallery…")
+        result = _render_all_screens(sync_screenshots=True, create_archive=False)
+        if result != 0:
+            _logger.warning("Initial render exited with status %s", result)
+    except Exception as exc:  # pragma: no cover - runtime failure is logged
+        _logger.exception("Initial render failed: %s", exc)
+
+
+@app.before_request
+def _prime_screenshots() -> None:
+    global _auto_render_done
+
+    if _auto_render_done:
+        return
+
+    with _auto_render_lock:
+        if _auto_render_done:
+            return
+        _run_startup_renderer()
+        _auto_render_done = True
 
 
 @app.route("/")
