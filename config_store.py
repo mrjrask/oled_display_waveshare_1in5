@@ -174,38 +174,33 @@ class ConfigStore:
 def summarise_diff(old: Dict[str, Any], new: Dict[str, Any]) -> str:
     """Generate a human-readable summary of configuration changes."""
 
-    def _normalise_playlists(config: Dict[str, Any]) -> Dict[str, Any]:
-        playlists = config.get("playlists")
-        if isinstance(playlists, dict):
-            return playlists
+    def _normalise_screens(config: Dict[str, Any]) -> Dict[str, Any]:
+        screens = config.get("screens")
+        if isinstance(screens, dict):
+            return screens
         return {}
 
-    old_playlists = _normalise_playlists(old)
-    new_playlists = _normalise_playlists(new)
+    old_screens = _normalise_screens(old)
+    new_screens = _normalise_screens(new)
 
-    changed: List[str] = []
     added: List[str] = []
     removed: List[str] = []
-    for key in sorted(set(old_playlists) | set(new_playlists)):
-        if key not in old_playlists:
+    changed: List[str] = []
+
+    for key in sorted(set(old_screens) | set(new_screens)):
+        if key not in old_screens:
             added.append(key)
-        elif key not in new_playlists:
+        elif key not in new_screens:
             removed.append(key)
-        elif old_playlists.get(key) != new_playlists.get(key):
+        elif old_screens.get(key) != new_screens.get(key):
             changed.append(key)
 
     parts: List[str] = []
     if added:
-        parts.append("Added playlists: " + ", ".join(added))
+        parts.append("Added screens: " + ", ".join(added))
     if changed:
-        parts.append("Updated playlists: " + ", ".join(changed))
+        parts.append("Updated screens: " + ", ".join(changed))
     if removed:
-        parts.append("Removed playlists: " + ", ".join(removed))
-
-    if old.get("sequence") != new.get("sequence"):
-        parts.append("Sequence updated")
-
-    if old.get("metadata") != new.get("metadata"):
-        parts.append("Metadata changed")
+        parts.append("Removed screens: " + ", ".join(removed))
 
     return "; ".join(parts) if parts else "Configuration saved"

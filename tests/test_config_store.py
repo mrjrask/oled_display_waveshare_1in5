@@ -5,23 +5,17 @@ import pytest
 from config_store import ConfigStore
 
 
-def make_config(value: str) -> dict:
-    return {
-        "version": 2,
-        "catalog": {"presets": {}},
-        "metadata": {"value": value},
-        "playlists": {"main": {"steps": [{"screen": "date"}]}},
-        "sequence": [{"playlist": "main"}],
-    }
+def make_config(value: int) -> dict:
+    return {"screens": {"date": value, "travel": value + 1}}
 
 
 def test_config_store_versioning_and_pruning(tmp_path):
     config_path = tmp_path / "screens_config.json"
     store = ConfigStore(str(config_path), retention=2)
 
-    v1 = store.save(make_config("one"), actor="tester1")
-    v2 = store.save(make_config("two"), actor="tester2")
-    v3 = store.save(make_config("three"), actor="tester3")
+    v1 = store.save(make_config(1), actor="tester1")
+    v2 = store.save(make_config(2), actor="tester2")
+    v3 = store.save(make_config(3), actor="tester3")
 
     versions = store.list_versions()
     assert versions[0]["id"] == v3
@@ -40,12 +34,12 @@ def test_config_store_rollback(tmp_path):
     config_path = tmp_path / "config.json"
     store = ConfigStore(str(config_path))
 
-    first = make_config("initial")
+    first = make_config(10)
     store.save(first, actor="tester")
-    second = make_config("second")
+    second = make_config(20)
     version_id = store.save(second, actor="tester")
 
     rolled = store.rollback(version_id, actor="tester")
-    assert rolled["metadata"]["value"] == "second"
+    assert rolled["screens"]["date"] == 20
     persisted = json.loads(config_path.read_text())
-    assert persisted["metadata"]["value"] == "second"
+    assert persisted["screens"]["date"] == 20
