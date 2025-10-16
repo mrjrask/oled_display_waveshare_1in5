@@ -156,6 +156,17 @@ def build_scheduler(config: Dict[str, Any]) -> ScreenScheduler:
 
         if frequency < 0:
             raise ValueError(f"Frequency for '{screen_id}' cannot be negative")
+
+        if frequency == 0:
+            # A frequency of zero disables the screen.  This allows playlists to
+            # keep entries around for future use without removing them from the
+            # configuration file while ensuring they never appear in the
+            # rotation.
+            continue
+
         entries.append(_ScheduleEntry(screen_id, frequency, alternate=alternate))
+
+    if not entries:
+        raise ValueError("Configuration must contain at least one enabled screen")
 
     return ScreenScheduler(entries)

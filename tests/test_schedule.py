@@ -11,10 +11,27 @@ def make_registry(availability):
     }
 
 
+def collect_sequence(scheduler, registry, length):
+    results = []
+    for _ in range(length):
+        definition = scheduler.next_available(registry)
+        results.append(definition.id if definition is not None else None)
+    return results
+
+
+def collect_played_ids(scheduler, registry, iterations):
+    results = []
+    for _ in range(iterations):
+        definition = scheduler.next_available(registry)
+        if definition is not None:
+            results.append(definition.id)
+    return results
+
+
 def test_build_scheduler_from_config():
     config = {
         "screens": {
-            "date": 0,
+            "date": 1,
             "travel": 2,
             "inside": 1,
         }
@@ -55,39 +72,39 @@ def test_build_scheduler_rejects_unknown_screen():
 
 
 def test_scheduler_respects_frequency():
-    config = {"screens": {"date": 0, "travel": 1}}
+    config = {"screens": {"date": 1, "travel": 2}}
     scheduler = build_scheduler(config)
     registry = make_registry({"date": True, "travel": True})
 
-    sequence = [scheduler.next_available(registry).id for _ in range(6)]
-    assert sequence == ["date", "travel", "date", "travel", "date", "travel"]
+    sequence = collect_sequence(scheduler, registry, 6)
+    assert sequence == ["date", "travel", "date", "date", "travel", "date"]
 
 
 def test_scheduler_frequency_interval_matches_configuration():
-    config = {"screens": {"date": 0, "travel": 3}}
+    config = {"screens": {"date": 1, "travel": 4}}
     scheduler = build_scheduler(config)
     registry = make_registry({"date": True, "travel": True})
 
-    sequence = [scheduler.next_available(registry).id for _ in range(12)]
-    # ``travel`` should insert three other screens between each appearance.
+    sequence = collect_sequence(scheduler, registry, 12)
+    # ``travel`` should insert four other screens between each appearance.
     assert sequence == [
         "date",
         "travel",
         "date",
         "date",
         "date",
-        "travel",
-        "date",
-        "date",
         "date",
         "travel",
         "date",
         "date",
+        "date",
+        "date",
+        "travel",
     ]
 
 
 def test_scheduler_skips_unavailable_screen():
-    config = {"screens": {"travel": 0}}
+    config = {"screens": {"travel": 1}}
     scheduler = build_scheduler(config)
     registry = make_registry({"travel": False})
     assert scheduler.next_available(registry) is None
@@ -117,3 +134,20 @@ def test_invalid_configuration_shapes():
                 }
             }
         )
+
+
+def test_zero_frequency_entries_are_skipped():
+    config = {"screens": {"date": 0, "time": 2}}
+    scheduler = build_scheduler(config)
+    registry = make_registry({"date": True, "time": True})
+
+    played = collect_played_ids(scheduler, registry, 6)
+    assert played
+    assert set(played) == {"time"}
+
+
+def test_all_zero_frequencies_raise_error():
+    config = {"screens": {"date": 0, "time": 0}}
+
+    with pytest.raises(ValueError):
+        build_scheduler(config)
