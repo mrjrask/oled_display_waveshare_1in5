@@ -13,8 +13,20 @@
     "bears next": 4,
     "nfl logo": 0,
     "NFL Scoreboard": 4,
-    "NFL Overview NFC": 4,
-    "NFL Overview AFC": 4,
+    "NFL Overview NFC": {
+      "frequency": 4,
+      "alt": {
+        "screen": "NFL Standings NFC",
+        "frequency": 3
+      }
+    },
+    "NFL Overview AFC": {
+      "frequency": 4,
+      "alt": {
+        "screen": "NFL Standings AFC",
+        "frequency": 3
+      }
+    },
     "NFL Standings NFC": 0,
     "NFL Standings AFC": 0,
     "hawks logo": 0,
