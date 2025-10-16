@@ -13,10 +13,18 @@ KNOWN_SCREENS: Set[str] = set(SCREEN_IDS)
 
 
 @dataclass
+class _AlternateSchedule:
+    screen_id: str
+    frequency: int
+
+
+@dataclass
 class _ScheduleEntry:
     screen_id: str
     frequency: int
     cooldown: int = 0
+    play_count: int = 0
+    alternate: Optional[_AlternateSchedule] = None
 
 
 class ScreenScheduler:
@@ -25,7 +33,12 @@ class ScreenScheduler:
     def __init__(self, entries: Sequence[_ScheduleEntry]):
         self._entries: List[_ScheduleEntry] = list(entries)
         self._cursor: int = 0
-        self._requested: Set[str] = {entry.screen_id for entry in self._entries}
+        requested: Set[str] = set()
+        for entry in self._entries:
+            requested.add(entry.screen_id)
+            if entry.alternate is not None:
+                requested.add(entry.alternate.screen_id)
+        self._requested = requested
 
     @property
     def node_count(self) -> int:
@@ -58,7 +71,16 @@ class ScreenScheduler:
             # when it hits zero we align the output with the configured
             # interval while keeping ``0`` as an "always show" value.
             entry.cooldown = max(entry.frequency, 0)
-            definition = registry.get(entry.screen_id)
+            entry.play_count += 1
+
+            candidate_id = entry.screen_id
+            if entry.alternate and entry.alternate.frequency > 0:
+                if entry.play_count % entry.alternate.frequency == 0:
+                    alt_def = registry.get(entry.alternate.screen_id)
+                    if alt_def and alt_def.available:
+                        return alt_def
+
+            definition = registry.get(candidate_id)
             if definition and definition.available:
                 return definition
 
@@ -82,17 +104,58 @@ def build_scheduler(config: Dict[str, Any]) -> ScreenScheduler:
         raise ValueError("Configuration must provide a non-empty 'screens' mapping")
 
     entries: List[_ScheduleEntry] = []
-    for screen_id, freq in screens.items():
+    for screen_id, raw in screens.items():
         if not isinstance(screen_id, str):
             raise ValueError("Screen identifiers must be strings")
         if screen_id not in KNOWN_SCREENS:
             raise ValueError(f"Unknown screen id '{screen_id}'")
-        try:
-            frequency = int(freq)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Frequency for '{screen_id}' must be an integer") from exc
+        alternate: Optional[_AlternateSchedule] = None
+
+        if isinstance(raw, dict):
+            if "frequency" not in raw:
+                raise ValueError(f"Frequency for '{screen_id}' must be provided")
+            try:
+                frequency = int(raw["frequency"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Frequency for '{screen_id}' must be an integer"
+                ) from exc
+
+            alt_spec = raw.get("alt")
+            if alt_spec is not None:
+                if not isinstance(alt_spec, dict):
+                    raise ValueError(
+                        f"Alternate configuration for '{screen_id}' must be an object"
+                    )
+                alt_screen = alt_spec.get("screen")
+                alt_frequency = alt_spec.get("frequency")
+                if not isinstance(alt_screen, str):
+                    raise ValueError(
+                        f"Alternate screen id for '{screen_id}' must be a string"
+                    )
+                if alt_screen not in KNOWN_SCREENS:
+                    raise ValueError(
+                        f"Unknown alternate screen id '{alt_screen}' for '{screen_id}'"
+                    )
+                try:
+                    alt_frequency_int = int(alt_frequency)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"Alternate frequency for '{screen_id}' must be an integer"
+                    ) from exc
+                if alt_frequency_int <= 0:
+                    raise ValueError(
+                        f"Alternate frequency for '{screen_id}' must be greater than zero"
+                    )
+                alternate = _AlternateSchedule(alt_screen, alt_frequency_int)
+        else:
+            try:
+                frequency = int(raw)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Frequency for '{screen_id}' must be an integer") from exc
+
         if frequency < 0:
             raise ValueError(f"Frequency for '{screen_id}' cannot be negative")
-        entries.append(_ScheduleEntry(screen_id, frequency))
+        entries.append(_ScheduleEntry(screen_id, frequency, alternate=alternate))
 
     return ScreenScheduler(entries)
