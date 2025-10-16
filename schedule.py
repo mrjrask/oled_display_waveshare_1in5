@@ -45,9 +45,19 @@ class ScreenScheduler:
 
             if entry.cooldown > 0:
                 entry.cooldown -= 1
-                continue
+                if entry.cooldown > 0:
+                    continue
 
-            entry.cooldown = entry.frequency
+            # A frequency of ``n`` means the screen should appear once every
+            # ``n`` iterations of the playlist.  The previous implementation
+            # used the raw frequency value as the cooldown which effectively
+            # produced a cycle of ``n + 1`` iterations, making the screens
+            # appear less often than configured (e.g. a frequency of 3 would
+            # yield one appearance every 4 loops).  By resetting the cooldown
+            # to the raw frequency and letting the current iteration proceed
+            # when it hits zero we align the output with the configured
+            # interval while keeping ``0`` as an "always show" value.
+            entry.cooldown = max(entry.frequency, 0)
             definition = registry.get(entry.screen_id)
             if definition and definition.available:
                 return definition

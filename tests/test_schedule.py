@@ -36,7 +36,30 @@ def test_scheduler_respects_frequency():
     registry = make_registry({"date": True, "travel": True})
 
     sequence = [scheduler.next_available(registry).id for _ in range(6)]
-    assert sequence == ["date", "travel", "date", "date", "travel", "date"]
+    assert sequence == ["date", "travel", "date", "travel", "date", "travel"]
+
+
+def test_scheduler_frequency_interval_matches_configuration():
+    config = {"screens": {"date": 0, "travel": 3}}
+    scheduler = build_scheduler(config)
+    registry = make_registry({"date": True, "travel": True})
+
+    sequence = [scheduler.next_available(registry).id for _ in range(12)]
+    # ``travel`` should insert three other screens between each appearance.
+    assert sequence == [
+        "date",
+        "travel",
+        "date",
+        "date",
+        "date",
+        "travel",
+        "date",
+        "date",
+        "date",
+        "travel",
+        "date",
+        "date",
+    ]
 
 
 def test_scheduler_skips_unavailable_screen():
