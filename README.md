@@ -192,6 +192,30 @@ This writes a playlist-aware config and validates it using the scheduler parser.
 - Set `metadata.ui.playlist_admin_enabled` to `false` (or append `?legacy=1` to the URL) to fall back to the JSON editor.
 - Every save records an audit entry (actor, summary, diff summary) and prunes historical versions beyond the configured retention window.
 
+### Default playlist reference
+
+The repository ships with a ready-to-run `screens_config.json` that exposes the **Default loop** playlist shown in the admin UI. The playlist executes the following steps in order (rules are evaluated on each pass through the loop):
+
+1. `date`
+2. `weather1`
+3. Every third pass, show `weather2`.
+4. Every third pass, show `inside` (indoor sensors).
+5. `travel`
+6. Every fourth pass, show `vrnof` (Verano office status).
+7. Every other pass, cycle through the Blackhawks cards: `hawks logo`, `hawks last`, `hawks live`, `hawks next`, `hawks next home`.
+8. Every fifth pass, show `NHL Scoreboard`.
+9. Every sixth pass, cycle through `NHL Standings Overview`, `NHL Standings Overview`, `NHL Standings West`.
+10. Every eighteenth pass (starting at phase 12), show `NHL Standings East`.
+11. Every fourth pass, show `bears logo`.
+12. Every fourth pass, show `bears next`.
+13. Every fifth pass, show `NFL Scoreboard`.
+14. Every sixth pass, cycle through `NFL Overview NFC`, `NFL Overview NFC`, `NFL Standings NFC`.
+15. Every sixth pass, cycle through `NFL Overview AFC`, `NFL Overview AFC`, `NFL Standings AFC`.
+16. Every seventh pass, show `NBA Scoreboard`.
+17. Every third pass, show `MLB Scoreboard`.
+
+Each step above maps directly to the JSON structure under `playlists.default.steps`, so any edits made through the admin UI will keep the document and the on-device rotation in sync.
+
 ---
 
 ### Secrets & environment variables
