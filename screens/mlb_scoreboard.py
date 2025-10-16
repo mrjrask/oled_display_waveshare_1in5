@@ -22,7 +22,7 @@ import time
 from typing import Iterable, Optional
 
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 from config import (
     WIDTH,
@@ -69,6 +69,9 @@ LEAGUE_LOGO_KEYS        = ("MLB", "mlb")
 LEAGUE_LOGO_GAP         = 4
 LEAGUE_LOGO_HEIGHT      = max(1, int(round(LOGO_HEIGHT * 1.25)))
 IN_PROGRESS_SCORE_COLOR = (255, 210, 66)  # #ffd242
+IN_PROGRESS_STATUS_COLOR = IN_PROGRESS_SCORE_COLOR
+FINAL_WINNING_SCORE_COLOR = (255, 255, 255)
+FINAL_LOSING_SCORE_COLOR = (160, 160, 160)
 
 # Cache for resized logos {abbr: Image}
 _LOGO_CACHE: dict[str, Optional[Image.Image]] = {}
@@ -142,11 +145,97 @@ def _is_game_in_progress(game: dict) -> bool:
     return False
 
 
+def _is_game_final(game: dict) -> bool:
+    status = (game or {}).get("status", {}) or {}
+    abstract = (status.get("abstractGameState") or "").lower()
+    detailed = (status.get("detailedState") or "").lower()
+    code = (status.get("statusCode") or "").upper()
+
+    if abstract in {"final", "completed"}:
+        return True
+    if code in {"F", "O"}:
+        return True
+    if "final" in detailed:
+        return True
+    return False
+
+
 def _score_text(side: dict, *, show: bool) -> str:
     if not show:
         return "—"
     score = (side or {}).get("score")
     return "—" if score is None else str(score)
+
+
+def _score_value(side: dict) -> Optional[int]:
+    score = (side or {}).get("score")
+    if isinstance(score, (int, float)):
+        return int(score)
+    if isinstance(score, str):
+        cleaned = score.strip()
+        if cleaned.isdigit():
+            try:
+                return int(cleaned)
+            except Exception:
+                return None
+        try:
+            return int(float(cleaned))
+        except Exception:
+            return None
+    return None
+
+
+def _team_result(side: dict, opponent: dict) -> Optional[str]:
+    for key in ("isWinner", "winner", "won"):
+        value = (side or {}).get(key)
+        if isinstance(value, bool):
+            return "win" if value else "loss"
+
+    side_score = _score_value(side)
+    opp_score = _score_value(opponent)
+    if side_score is not None and opp_score is not None:
+        if side_score > opp_score:
+            return "win"
+        if side_score < opp_score:
+            return "loss"
+    return None
+
+
+def _final_results(away: dict, home: dict) -> dict:
+    away_result = _team_result(away, home)
+    home_result = _team_result(home, away)
+
+    if away_result == "win":
+        home_result = "loss"
+    elif away_result == "loss":
+        home_result = "win"
+    elif home_result == "win":
+        away_result = "loss"
+    elif home_result == "loss":
+        away_result = "win"
+
+    return {"away": away_result, "home": home_result}
+
+
+def _grayscale_logo(logo: Optional[Image.Image]) -> Optional[Image.Image]:
+    if logo is None:
+        return None
+    base = logo.convert("RGBA")
+    alpha = base.getchannel("A")
+    gray = ImageOps.grayscale(base.convert("RGB"))
+    return Image.merge("RGBA", (gray, gray, gray, alpha))
+
+
+def _score_fill(team_key: str, *, in_progress: bool, final: bool, results: dict) -> tuple[int, int, int]:
+    if in_progress:
+        return IN_PROGRESS_SCORE_COLOR
+    if final:
+        result = results.get(team_key)
+        if result == "loss":
+            return FINAL_LOSING_SCORE_COLOR
+        if result == "win":
+            return FINAL_WINNING_SCORE_COLOR
+    return (255, 255, 255)
 
 
 def _final_inning(linescore: dict) -> Optional[int]:
@@ -244,29 +333,40 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
     away_text = _score_text(away, show=show_scores)
     home_text = _score_text(home, show=show_scores)
     in_progress = _is_game_in_progress(game)
+    final = _is_game_final(game)
+    results = _final_results(away, home) if final else {"away": None, "home": None}
 
     # Score row (5 columns)
     score_top = top
     for idx, text in ((0, away_text), (2, "@"), (4, home_text)):
         font = SCORE_FONT if idx != 2 else CENTER_FONT
-        fill = IN_PROGRESS_SCORE_COLOR if in_progress and idx in (0, 4) else (255, 255, 255)
+        if idx == 0:
+            fill = _score_fill("away", in_progress=in_progress, final=final, results=results)
+        elif idx == 4:
+            fill = _score_fill("home", in_progress=in_progress, final=final, results=results)
+        else:
+            fill = (255, 255, 255)
         _center_text(draw, text, font, COL_X[idx], COL_WIDTHS[idx], score_top, SCORE_ROW_H, fill=fill)
 
     # Logos
-    for idx, team_side in ((1, away), (3, home)):
+    for idx, team_side, team_key in ((1, away, "away"), (3, home, "home")):
         team_obj = (team_side or {}).get("team", {})
         abbr = _team_logo_abbr(team_obj)
         logo = _load_logo_cached(abbr) if abbr else None
         if not logo:
             continue
-        x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo.width) // 2
-        y0 = score_top + (SCORE_ROW_H - logo.height) // 2
-        canvas.paste(logo, (x0, y0), logo)
+        logo_to_paste = logo
+        if final and results.get(team_key) == "loss":
+            logo_to_paste = _grayscale_logo(logo) or logo
+        x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo_to_paste.width) // 2
+        y0 = score_top + (SCORE_ROW_H - logo_to_paste.height) // 2
+        canvas.paste(logo_to_paste, (x0, y0), logo_to_paste)
 
     # Status row (center column text)
     status_top = score_top + SCORE_ROW_H
     status_text = _format_status(game)
-    _center_text(draw, status_text, STATUS_FONT, COL_X[2], COL_WIDTHS[2], status_top, STATUS_ROW_H)
+    status_fill = IN_PROGRESS_STATUS_COLOR if in_progress else (255, 255, 255)
+    _center_text(draw, status_text, STATUS_FONT, COL_X[2], COL_WIDTHS[2], status_top, STATUS_ROW_H, fill=status_fill)
 
 
 def _compose_canvas(games: list[dict]) -> Image.Image:
