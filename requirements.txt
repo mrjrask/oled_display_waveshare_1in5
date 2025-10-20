@@ -4,8 +4,7 @@ pytz
 Pillow 
 waitress
 yfinance 
-numpy 
-opencv-python-headless
+numpy
 adafruit-blinka 
 adafruit-circuitpython-bme680 
 spidev 
