@@ -40,8 +40,8 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
       python3-venv python3-pip python3-dev python3-opencv \
       build-essential libjpeg-dev libopenblas0 libopenblas-dev \
       libopenjp2-7-dev libtiff5-dev libcairo2-dev libpango1.0-dev \
-      libgdk-pixbuf2.0-dev libffi-dev network-manager wireless-tools \
-      i2c-tools fonts-dejavu-core libgl1-mesa-glx libx264-dev ffmpeg git
+      libgdk-pixbuf2.0-xlib-dev libffi-dev network-manager wireless-tools \
+      i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git
   pip3 install -r requirements.txt
   ```
   Pillow on current Raspberry Pi OS builds usually includes **WebP** support. If animated WebP is not rendering, upgrade Pillow:
