@@ -660,10 +660,18 @@ def _last_game_result_prefix(game: Dict, feed: Optional[Dict] = None) -> str:
     linescore = (game or {}).get("linescore") or {}
     outcome = (game or {}).get("gameOutcome") or {}
 
+    def _is_shootout(text: str) -> bool:
+        return bool(text) and (text == "SO" or "SHOOTOUT" in text)
+
+    def _is_overtime(text: str) -> bool:
+        return bool(text) and not _is_shootout(text) and ("OT" in text or "OVERT" in text)
+
     # Shootout overrides any other period information.
     if linescore.get("hasShootout"):
         return "Final/SO"
-    if _norm(outcome.get("lastPeriodType")) == "SO":
+
+    outcome_period = _norm(outcome.get("lastPeriodType"))
+    if _is_shootout(outcome_period):
         return "Final/SO"
 
     # Check for overtime indicators in the schedule payload.
@@ -681,9 +689,9 @@ def _last_game_result_prefix(game: Dict, feed: Optional[Dict] = None) -> str:
     if not period_text and feed:
         period_text = _norm(feed.get("perOrdinal"))
 
-    if period_text == "SO":
+    if _is_shootout(period_text):
         return "Final/SO"
-    if "OT" in period_text:
+    if _is_overtime(period_text):
         return "Final/OT"
 
     if period_text.endswith(("ST", "ND", "RD", "TH")):
@@ -704,7 +712,7 @@ def _last_game_result_prefix(game: Dict, feed: Optional[Dict] = None) -> str:
     except Exception:
         pass
 
-    if _norm(outcome.get("lastPeriodType")) == "OT":
+    if _is_overtime(outcome_period):
         return "Final/OT"
 
     return "Final"
