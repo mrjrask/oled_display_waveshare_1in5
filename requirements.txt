@@ -13,9 +13,7 @@ gpiozero
 cairosvg
 lgpio
 rpi.gpio
-pigpio
 colorama
-smbus2
 adafruit-circuitpython-bme280
 pimoroni-bme280
-bme680
+-e ./vendor/bme68x
