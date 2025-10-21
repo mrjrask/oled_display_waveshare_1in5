@@ -22,7 +22,7 @@ import time
 from typing import Iterable, Optional
 
 import requests
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw
 
 from config import (
     WIDTH,
@@ -215,17 +215,6 @@ def _final_results(away: dict, home: dict) -> dict:
         away_result = "win"
 
     return {"away": away_result, "home": home_result}
-
-
-def _grayscale_logo(logo: Optional[Image.Image]) -> Optional[Image.Image]:
-    if logo is None:
-        return None
-    base = logo.convert("RGBA")
-    alpha = base.getchannel("A")
-    gray = ImageOps.grayscale(base.convert("RGB"))
-    return Image.merge("RGBA", (gray, gray, gray, alpha))
-
-
 def _score_fill(team_key: str, *, in_progress: bool, final: bool, results: dict) -> tuple[int, int, int]:
     if in_progress:
         return IN_PROGRESS_SCORE_COLOR
@@ -355,12 +344,9 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
         logo = _load_logo_cached(abbr) if abbr else None
         if not logo:
             continue
-        logo_to_paste = logo
-        if final and results.get(team_key) == "loss":
-            logo_to_paste = _grayscale_logo(logo) or logo
-        x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo_to_paste.width) // 2
-        y0 = score_top + (SCORE_ROW_H - logo_to_paste.height) // 2
-        canvas.paste(logo_to_paste, (x0, y0), logo_to_paste)
+        x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo.width) // 2
+        y0 = score_top + (SCORE_ROW_H - logo.height) // 2
+        canvas.paste(logo, (x0, y0), logo)
 
     # Status row (center column text)
     status_top = score_top + SCORE_ROW_H
