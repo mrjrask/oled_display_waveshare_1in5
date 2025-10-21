@@ -36,13 +36,14 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 - Packages (install via apt / pip):
   ```bash
   sudo apt-get update
-  sudo apt-get install -y python3-pip python3-pil libopenjp2-7 libtiff5
-  pip3 install pillow requests colorama spidev gpiozero
+  sudo apt-get install -y python3-pip libopenjp2-7 libtiff5
+  pip3 install pillow requests colorama spidev gpiozero bme68x
   ```
   Pillow on current Raspberry Pi OS builds usually includes **WebP** support. If animated WebP is not rendering, upgrade Pillow:
   ```bash
   pip3 install --upgrade pillow
   ```
+  The `bme68x` package is required when using the bundled BME688 air quality sensor helper.
 
 ---
 
