@@ -99,7 +99,7 @@ COLUMN_LAYOUT = {
     "ties": 120,
 }
 COLUMN_HEADERS: List[tuple[str, str, str]] = [
-    ("Team", "team", "left"),
+    ("", "team", "left"),
     ("W", "wins", "right"),
     ("L", "losses", "right"),
     ("T", "ties", "right"),
