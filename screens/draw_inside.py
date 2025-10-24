@@ -101,10 +101,8 @@ def _probe_pimoroni_bme68x(_i2c: Any) -> SensorProbeResult:
     gas_high = getattr(const_module, "BME68X_VARIANT_GAS_HIGH", None)
     if variant_id == gas_high:
         provider = "Pimoroni BME688"
-    elif variant_id == gas_low:
-        provider = "Pimoroni BME680"
     else:
-        provider = "Pimoroni BME68x"
+        provider = "Pimoroni BME68X"
 
     def read() -> SensorReadings:
         data = sensor.get_data()
@@ -199,7 +197,7 @@ def _probe_pimoroni_bme680(_i2c: Any) -> SensorProbeResult:
 
         return dict(temp_f=temp_f, humidity=hum_val, pressure_inhg=pres, voc_ohms=voc)
 
-    return "Pimoroni BME680", read
+    return "Pimoroni BME68X", read
 
 
 def _probe_pimoroni_bme280(_i2c: Any) -> SensorProbeResult:
@@ -351,7 +349,8 @@ def draw_inside(display, transition: bool=False):
         return None
 
     # Title text
-    title = f"Inside • {provider}"
+    title = "Inside"
+    subtitle = provider or ""
 
     # Compose canvas
     img  = Image.new("RGB", (W, H), config.INSIDE_COL_BG)
@@ -377,6 +376,23 @@ def draw_inside(display, transition: bool=False):
     tw, th = measure_text(draw, title, t_font)
     draw.text(((W - tw)//2, 0), title, font=t_font, fill=config.INSIDE_COL_TITLE)
 
+    subtitle_max_h = 10
+    if subtitle:
+        sub_font = fit_font(
+            draw,
+            subtitle,
+            title_base,
+            max_width=W - 8,
+            max_height=subtitle_max_h,
+            min_pt=8,
+            max_pt=subtitle_max_h + 1,
+        )
+        sw, sh = measure_text(draw, subtitle, sub_font)
+        draw.text(((W - sw)//2, th), subtitle, font=sub_font, fill=config.INSIDE_COL_TITLE)
+    else:
+        sub_font = t_font
+        sw, sh = 0, 0
+
     # --- Temperature (auto-fit into a bounded block; slightly smaller)
     temp_txt     = f"{temp_f:.1f}°F"
     temp_area_h  = 22  # ↓ was 24; frees more space for shorter chips
@@ -390,11 +406,12 @@ def draw_inside(display, transition: bool=False):
         max_pt=temp_area_h + 2,
     )
     ttw, tth = measure_text(draw, temp_txt, T_font)
-    t_y = th + 2 + max(0, (temp_area_h - tth)//2)
+    title_block_h = th + (sh if subtitle else 0)
+    t_y = title_block_h + 2 + max(0, (temp_area_h - tth)//2)
     draw.text(((W - ttw)//2, t_y), temp_txt, font=T_font, fill=temperature_color(temp_f))
 
     # --- Chips region (shorter chips, tighter gaps, smaller bottom margin)
-    top_after_temp = th + 2 + temp_area_h
+    top_after_temp = title_block_h + 2 + temp_area_h
     bottom_margin  = 2      # ↓ was 3
     gap            = 2      # ↓ was 3
     chips_h_avail  = max(18, H - bottom_margin - top_after_temp)
