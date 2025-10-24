@@ -76,13 +76,15 @@ def _probe_sensor():
 
     # 3) Pimoroni BME280
     try:
-        import pimoroni_bme280 as pim_bme280  # type: ignore
-        dev = pim_bme280.BME280(i2c_dev=i2c)
+        import bme280  # type: ignore
+        dev = bme280.BME280()
+
         def read():
             temp_f = float(dev.get_temperature()) * 9/5 + 32
             hum    = float(dev.get_humidity())
             pres   = float(dev.get_pressure()) * 0.02953
             return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=None)
+
         return "Pimoroni BME280", read
     except Exception:
         pass
