@@ -12,7 +12,7 @@ Everything is dynamically sized to fit 128×128 without clipping.
 from __future__ import annotations
 import time
 import logging
-from typing import Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from PIL import Image, ImageDraw
 import config
@@ -33,95 +33,258 @@ except Exception:  # allows non-Pi dev boxes
 
 W, H = config.WIDTH, config.HEIGHT
 
-# ── Universal sensor probe ───────────────────────────────────────────────────
-def _probe_sensor():
-    """
-    Try drivers in a safe order. Returns (provider_name, read_fn) or (None, None)
-    read_fn() -> dict with: temp_f, humidity, pressure_inhg, voc_ohms (or None)
-    """
+SensorReadings = Dict[str, Optional[float]]
+SensorProbeResult = Tuple[str, Callable[[], SensorReadings]]
+SensorProbeFn = Callable[[Any], Optional[SensorProbeResult]]
+
+
+def _extract_field(data: Any, key: str) -> Optional[float]:
+    if hasattr(data, key):
+        value = getattr(data, key)
+    elif isinstance(data, dict):
+        value = data.get(key)
+    else:
+        value = None
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _probe_adafruit_bme680(i2c: Any) -> SensorProbeResult:
+    import adafruit_bme680  # type: ignore
+
+    dev = adafruit_bme680.Adafruit_BME680_I2C(i2c)
+
+    def read() -> SensorReadings:
+        temp_f = float(dev.temperature) * 9 / 5 + 32
+        hum = float(dev.humidity)
+        pres = float(dev.pressure) * 0.02953
+        gas = getattr(dev, "gas", None)
+        voc = float(gas) if gas not in (None, 0) else None
+        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=voc)
+
+    return "Adafruit BME680", read
+
+
+def _probe_pimoroni_bme68x(_i2c: Any) -> SensorProbeResult:
+    from importlib import import_module
+
+    import bme68x  # type: ignore
+
+    try:
+        I2C_ADDR_LOW = getattr(bme68x, "BME68X_I2C_ADDR_LOW")
+        I2C_ADDR_HIGH = getattr(bme68x, "BME68X_I2C_ADDR_HIGH")
+    except AttributeError:
+        const = import_module("bme68xConstants")  # type: ignore
+        I2C_ADDR_LOW = getattr(const, "BME68X_I2C_ADDR_LOW", 0x76)
+        I2C_ADDR_HIGH = getattr(const, "BME68X_I2C_ADDR_HIGH", 0x77)
+
+    sensor = None
+    last_error: Optional[Exception] = None
+    for addr in (I2C_ADDR_LOW, I2C_ADDR_HIGH):
+        try:
+            sensor = bme68x.BME68X(addr)  # type: ignore
+            break
+        except Exception as exc:  # pragma: no cover - relies on hardware
+            last_error = exc
+    if sensor is None:
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("BME68X sensor not found")
+
+    variant_id = getattr(sensor, "variant_id", None)
+    const_module = import_module("bme68xConstants")  # type: ignore
+    gas_low = getattr(const_module, "BME68X_VARIANT_GAS_LOW", None)
+    gas_high = getattr(const_module, "BME68X_VARIANT_GAS_HIGH", None)
+    if variant_id == gas_high:
+        provider = "Pimoroni BME688"
+    elif variant_id == gas_low:
+        provider = "Pimoroni BME680"
+    else:
+        provider = "Pimoroni BME68x"
+
+    def read() -> SensorReadings:
+        data = sensor.get_data()
+        if isinstance(data, (list, tuple)):
+            data = data[0] if data else None
+        if data is None:
+            raise RuntimeError("BME68X returned no data")
+
+        temp_c = _extract_field(data, "temperature")
+        hum = _extract_field(data, "humidity")
+        pres_raw = _extract_field(data, "pressure")
+        voc_raw = _extract_field(data, "gas_resistance")
+
+        temp_f = temp_c * 9 / 5 + 32 if temp_c is not None else None
+        pres = None
+        if pres_raw is not None:
+            pres_hpa = pres_raw / 100.0 if pres_raw > 2000 else pres_raw
+            pres = pres_hpa * 0.02953
+
+        voc = voc_raw if voc_raw not in (None, 0) else None
+
+        if temp_f is None:
+            raise RuntimeError("BME68X temperature reading missing")
+
+        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=voc)
+
+    return provider, read
+
+
+def _probe_pimoroni_bme680(_i2c: Any) -> SensorProbeResult:
+    from importlib import import_module
+
+    try:
+        bme680 = import_module("pimoroni_bme680")  # type: ignore
+    except ModuleNotFoundError:
+        bme680 = import_module("bme680")  # type: ignore
+
+    try:
+        sensor = bme680.BME680(getattr(bme680, "I2C_ADDR_PRIMARY", 0x76))  # type: ignore
+    except Exception:
+        sensor = bme680.BME680()  # type: ignore
+
+    for method, value in (
+        ("set_humidity_oversample", getattr(bme680, "OS_2X", None)),
+        ("set_pressure_oversample", getattr(bme680, "OS_4X", None)),
+        ("set_temperature_oversample", getattr(bme680, "OS_8X", None)),
+        ("set_filter", getattr(bme680, "FILTER_SIZE_3", None)),
+        ("set_gas_status", getattr(bme680, "ENABLE_GAS_MEAS", None)),
+    ):
+        fn = getattr(sensor, method, None)
+        if callable(fn) and value is not None:
+            try:
+                fn(value)
+            except Exception:
+                pass
+
+    gas_temp = getattr(bme680, "DEFAULT_GAS_HEATER_TEMPERATURE", getattr(bme680, "GAS_HEATER_TEMP", None))
+    gas_dur = getattr(bme680, "DEFAULT_GAS_HEATER_DURATION", getattr(bme680, "GAS_HEATER_DURATION", None))
+    fn_temp = getattr(sensor, "set_gas_heater_temperature", None)
+    fn_dur = getattr(sensor, "set_gas_heater_duration", None)
+    if callable(fn_temp) and gas_temp is not None:
+        try:
+            fn_temp(gas_temp)
+        except Exception:
+            pass
+    if callable(fn_dur) and gas_dur is not None:
+        try:
+            fn_dur(gas_dur)
+        except Exception:
+            pass
+
+    def read() -> SensorReadings:
+        if not getattr(sensor, "get_sensor_data", lambda: False)():
+            raise RuntimeError("BME680 has no fresh data")
+        data = getattr(sensor, "data", None)
+        if data is None:
+            raise RuntimeError("BME680 returned no data")
+
+        temp_c = getattr(data, "temperature", None)
+        hum = getattr(data, "humidity", None)
+        pres_raw = getattr(data, "pressure", None)
+        gas = getattr(data, "gas_resistance", None)
+        heat_stable = getattr(data, "heat_stable", True)
+
+        temp_f = float(temp_c) * 9 / 5 + 32 if temp_c is not None else None
+        pres = float(pres_raw) * 0.02953 if pres_raw is not None else None
+        voc = float(gas) if gas not in (None, 0) and heat_stable else None
+        hum_val = float(hum) if hum is not None else None
+
+        if temp_f is None:
+            raise RuntimeError("BME680 temperature reading missing")
+
+        return dict(temp_f=temp_f, humidity=hum_val, pressure_inhg=pres, voc_ohms=voc)
+
+    return "Pimoroni BME680", read
+
+
+def _probe_pimoroni_bme280(_i2c: Any) -> SensorProbeResult:
+    import bme280  # type: ignore
+
+    dev = bme280.BME280()
+
+    def read() -> SensorReadings:
+        temp_f = float(dev.get_temperature()) * 9 / 5 + 32
+        hum = float(dev.get_humidity())
+        pres = float(dev.get_pressure()) * 0.02953
+        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=None)
+
+    return "Pimoroni BME280", read
+
+
+def _probe_adafruit_bme280(i2c: Any) -> SensorProbeResult:
+    import adafruit_bme280  # type: ignore
+
+    dev = adafruit_bme280.Adafruit_BME280_I2C(i2c)
+
+    def read() -> SensorReadings:
+        temp_f = float(dev.temperature) * 9 / 5 + 32
+        hum = float(dev.humidity)
+        pres = float(dev.pressure) * 0.02953
+        return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=None)
+
+    return "Adafruit BME280", read
+
+
+def _probe_adafruit_sht4x(i2c: Any) -> SensorProbeResult:
+    import adafruit_sht4x  # type: ignore
+
+    dev = adafruit_sht4x.SHT4x(i2c)
+    try:
+        mode = getattr(adafruit_sht4x, "Mode", None)
+        if mode is not None and hasattr(mode, "NOHEAT_HIGHPRECISION"):
+            dev.mode = mode.NOHEAT_HIGHPRECISION
+    except Exception:
+        pass
+
+    def read() -> SensorReadings:
+        temp_c, hum = dev.measurements
+        temp_f = float(temp_c) * 9 / 5 + 32
+        hum_val = float(hum)
+        return dict(temp_f=temp_f, humidity=hum_val, pressure_inhg=None, voc_ohms=None)
+
+    return "Adafruit SHT41", read
+
+
+def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings]]]:
+    """Try the available sensor drivers and return the first match."""
+
     if board is None or busio is None:
         logging.warning("BME* libs not available on this host; skipping sensor probe")
         return None, None
 
-    i2c = busio.I2C(getattr(board, "SCL"), getattr(board, "SDA"))
-
-    # 1) Adafruit BME680
     try:
-        import adafruit_bme680  # type: ignore
-        dev = adafruit_bme680.Adafruit_BME680_I2C(i2c)
-        def read():
-            temp_f = dev.temperature * 9/5 + 32
-            hum    = float(dev.humidity)
-            pres   = float(dev.pressure) * 0.02953
-            voc    = float(getattr(dev, "gas", None)) if getattr(dev, "gas", None) is not None else None
-            return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=voc)
-        return "Adafruit BME680", read
-    except Exception:
-        pass
+        i2c = busio.I2C(getattr(board, "SCL"), getattr(board, "SDA"))
+    except Exception as exc:
+        logging.warning("draw_inside: failed to initialise I2C bus: %s", exc)
+        return None, None
 
-    # 2) Pimoroni BME688/BME680 via bme68x
-    try:
-        from bme68x import BME68X, I2C_ADDR_PRIMARY  # type: ignore
-        dev = BME68X(i2c_addr=I2C_ADDR_PRIMARY)
-        def read():
-            data = dev.get_data()
-            temp_f = float(data.temperature) * 9/5 + 32
-            hum    = float(data.humidity)
-            pres   = float(data.pressure) * 0.02953
-            voc    = float(getattr(data, "gas_resistance", 0.0)) if getattr(data, "gas_resistance", None) else None
-            return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=voc)
-        return "Pimoroni BME688", read
-    except Exception:
-        pass
+    probers: Tuple[SensorProbeFn, ...] = (
+        _probe_adafruit_bme680,
+        _probe_pimoroni_bme68x,
+        _probe_pimoroni_bme680,
+        _probe_pimoroni_bme280,
+        _probe_adafruit_bme280,
+        _probe_adafruit_sht4x,
+    )
 
-    # 3) Pimoroni BME280
-    try:
-        import bme280  # type: ignore
-        dev = bme280.BME280()
-
-        def read():
-            temp_f = float(dev.get_temperature()) * 9/5 + 32
-            hum    = float(dev.get_humidity())
-            pres   = float(dev.get_pressure()) * 0.02953
-            return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=None)
-
-        return "Pimoroni BME280", read
-    except Exception:
-        pass
-
-    # 4) Adafruit BME280
-    try:
-        import adafruit_bme280  # type: ignore
-        dev = adafruit_bme280.Adafruit_BME280_I2C(i2c)
-        def read():
-            temp_f = float(dev.temperature) * 9/5 + 32
-            hum    = float(dev.humidity)
-            pres   = float(dev.pressure) * 0.02953
-            return dict(temp_f=temp_f, humidity=hum, pressure_inhg=pres, voc_ohms=None)
-        return "Adafruit BME280", read
-    except Exception:
-        pass
-
-    # 5) Adafruit SHT41 / SHT4x family
-    try:
-        import adafruit_sht4x  # type: ignore
-        dev = adafruit_sht4x.SHT4x(i2c)
+    for probe in probers:
         try:
-            mode = getattr(adafruit_sht4x, "Mode", None)
-            if mode is not None and hasattr(mode, "NOHEAT_HIGHPRECISION"):
-                dev.mode = mode.NOHEAT_HIGHPRECISION
-        except Exception:
-            pass
-
-        def read():
-            temp_c, hum = dev.measurements
-            temp_f = float(temp_c) * 9/5 + 32
-            hum = float(hum)
-            return dict(temp_f=temp_f, humidity=hum, pressure_inhg=None, voc_ohms=None)
-
-        return "Adafruit SHT41", read
-    except Exception:
-        pass
+            result = probe(i2c)
+        except ModuleNotFoundError as exc:
+            logging.debug("draw_inside: probe %s skipped (module missing): %s", probe.__name__, exc)
+            continue
+        except Exception as exc:  # pragma: no cover - relies on hardware
+            logging.debug("draw_inside: probe %s failed: %s", probe.__name__, exc, exc_info=True)
+            continue
+        if result:
+            provider, reader = result
+            logging.info("draw_inside: detected %s", provider)
+            return provider, reader
 
     logging.warning("No supported indoor environmental sensor detected.")
     return None, None
