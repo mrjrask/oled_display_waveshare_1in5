@@ -728,7 +728,11 @@ def _statsapi_available() -> bool:
         return False
 
     try:
-        socket.getaddrinfo(STATSAPI_HOST, None)
+        socket.getaddrinfo(
+            STATSAPI_HOST,
+            443,
+            proto=socket.IPPROTO_TCP,
+        )
     except socket.gaierror as exc:
         logging.warning("NHL statsapi DNS lookup failed: %s", exc)
         _dns_block_until = now + _DNS_RETRY_INTERVAL
