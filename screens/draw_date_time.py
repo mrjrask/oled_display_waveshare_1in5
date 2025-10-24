@@ -36,6 +36,7 @@ from config import (
     DATE_TIME_GH_ICON_PATHS,
 )
 from utils import (
+    ScreenImage,
     bright_color,
     check_github_updates,
     clear_display,
@@ -167,10 +168,15 @@ def draw_date(display, transition: bool=False):
 
     clear_display(display)
     display.image(img)
+    try:
+        display.show()
+    except AttributeError:
+        # Some display drivers immediately refresh when image() is called.
+        pass
     # run a tiny, delayed cycle in a short thread so we don't block
     t = threading.Thread(target=_cycle_colors_after_load, args=(display, "date_time", gh_on), daemon=True)
     t.start()
-    return None
+    return ScreenImage(img, displayed=True)
 
 
 def draw_time(display, transition: bool=False):
@@ -189,6 +195,10 @@ def draw_time(display, transition: bool=False):
 
     clear_display(display)
     display.image(img)
+    try:
+        display.show()
+    except AttributeError:
+        pass
     t = threading.Thread(target=_cycle_colors_after_load, args=(display, "time_date", gh_on), daemon=True)
     t.start()
-    return None
+    return ScreenImage(img, displayed=True)
