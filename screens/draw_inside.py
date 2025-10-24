@@ -2,8 +2,8 @@
 """
 draw_inside.py (RGB, 128x128)
 
-Universal BME* screen with a compact, modern layout:
-  • Title (detects and names: Adafruit/Pimoroni BME680, BME688, BME280)
+Universal environmental sensor screen with a compact, modern layout:
+  • Title (detects and names: Adafruit/Pimoroni BME680, BME688, BME280, SHT41)
   • Temperature (auto-fit)
   • Three rounded "chips": Humidity / Pressure (inHg) / VOC (or N/A if missing)
 Everything is dynamically sized to fit 128×128 without clipping.
@@ -100,7 +100,28 @@ def _probe_sensor():
     except Exception:
         pass
 
-    logging.warning("No supported BME* sensor detected.")
+    # 5) Adafruit SHT41 / SHT4x family
+    try:
+        import adafruit_sht4x  # type: ignore
+        dev = adafruit_sht4x.SHT4x(i2c)
+        try:
+            mode = getattr(adafruit_sht4x, "Mode", None)
+            if mode is not None and hasattr(mode, "NOHEAT_HIGHPRECISION"):
+                dev.mode = mode.NOHEAT_HIGHPRECISION
+        except Exception:
+            pass
+
+        def read():
+            temp_c, hum = dev.measurements
+            temp_f = float(temp_c) * 9/5 + 32
+            hum = float(hum)
+            return dict(temp_f=temp_f, humidity=hum, pressure_inhg=None, voc_ohms=None)
+
+        return "Adafruit SHT41", read
+    except Exception:
+        pass
+
+    logging.warning("No supported indoor environmental sensor detected.")
     return None, None
 
 # ── Chip drawing (LABEL left | VALUE right) ──────────────────────────────────
@@ -154,9 +175,12 @@ def draw_inside(display, transition: bool=False):
     try:
         data = read_fn()
         temp_f = float(data["temp_f"])
-        hum    = float(data["humidity"])
-        pres   = float(data["pressure_inhg"])
-        voc    = data.get("voc_ohms", None)
+        hum_raw = data.get("humidity")
+        hum = float(hum_raw) if hum_raw is not None else None
+        pres_raw = data.get("pressure_inhg")
+        pres = float(pres_raw) if pres_raw is not None else None
+        voc_raw = data.get("voc_ohms", None)
+        voc = float(voc_raw) if voc_raw is not None else None
     except Exception as e:
         logging.warning(f"draw_inside: sensor read failed: {e}")
         return None
@@ -215,8 +239,8 @@ def draw_inside(display, transition: bool=False):
     chips_top      = H - bottom_margin - chips_total
 
     # Values
-    hum_val = f"{hum:.1f}%"
-    prs_val = f"{pres:.2f} inHg"
+    hum_val = f"{hum:.1f}%" if hum is not None else "N/A"
+    prs_val = f"{pres:.2f} inHg" if pres is not None else "N/A"
     voc_val = format_voc_ohms(voc)
 
     chips = [
