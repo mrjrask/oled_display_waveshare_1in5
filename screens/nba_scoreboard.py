@@ -16,7 +16,7 @@ import os
 import time
 from typing import Any, Dict, Iterable, Optional
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw
 
 try:
     RESAMPLE = Image.ANTIALIAS
@@ -83,6 +83,10 @@ _NBA_HEADERS = {
     "Origin": "https://www.nba.com",
     "Referer": "https://www.nba.com/",
 }
+_NBA_SCOREBOARD_BASES: tuple[tuple[str, bool], ...] = (
+    ("https://cdn.nba.com/static/json/liveData/scoreboard", True),
+    ("https://nba-prod-us-east-1-media.s3.amazonaws.com/json/liveData/scoreboard", False),
+)
 _FORBIDDEN_CACHE_TTL = datetime.timedelta(minutes=30)
 _last_forbidden: Optional[datetime.datetime] = None
 _espn_fallback_notice_at: Optional[datetime.datetime] = None
@@ -308,17 +312,6 @@ def _final_results(away: dict, home: dict) -> dict:
         away_result = "win"
 
     return {"away": away_result, "home": home_result}
-
-
-def _grayscale_logo(logo: Optional[Image.Image]) -> Optional[Image.Image]:
-    if logo is None:
-        return None
-    base = logo.convert("RGBA")
-    alpha = base.getchannel("A")
-    gray = ImageOps.grayscale(base.convert("RGB"))
-    return Image.merge("RGBA", (gray, gray, gray, alpha))
-
-
 def _score_fill(team_key: str, *, in_progress: bool, final: bool, results: dict) -> tuple[int, int, int]:
     if in_progress:
         return IN_PROGRESS_SCORE_COLOR
@@ -473,12 +466,9 @@ def _draw_game_block(canvas: Image.Image, draw: ImageDraw.ImageDraw, game: dict,
         logo = _load_logo_cached(abbr) if abbr else None
         if not logo:
             continue
-        logo_to_paste = logo
-        if final and results.get(team_key) == "loss":
-            logo_to_paste = _grayscale_logo(logo) or logo
-        x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo_to_paste.width) // 2
-        y0 = score_top + (SCORE_ROW_H - logo_to_paste.height) // 2
-        canvas.paste(logo_to_paste, (x0, y0), logo_to_paste)
+        x0 = COL_X[idx] + (COL_WIDTHS[idx] - logo.width) // 2
+        y0 = score_top + (SCORE_ROW_H - logo.height) // 2
+        canvas.paste(logo, (x0, y0), logo)
 
     status_top = score_top + SCORE_ROW_H
     status_text = _format_status(game)
@@ -916,10 +906,14 @@ def _reset_espn_fallback_notice() -> None:
 
 
 def _fetch_games_for_date(day: datetime.date) -> list[dict]:
-    def _load_json(url: str) -> Optional[Dict[str, Any]]:
+    def _load_json(url: str, *, respect_forbidden_cache: bool = True) -> Optional[Dict[str, Any]]:
         global _last_forbidden
 
-        if _last_forbidden and (datetime.datetime.now() - _last_forbidden) < _FORBIDDEN_CACHE_TTL:
+        if (
+            respect_forbidden_cache
+            and _last_forbidden
+            and (datetime.datetime.now() - _last_forbidden) < _FORBIDDEN_CACHE_TTL
+        ):
             logging.debug(
                 "Skipping NBA scoreboard fetch for %s due to recent 403", url
             )
@@ -945,13 +939,26 @@ def _fetch_games_for_date(day: datetime.date) -> list[dict]:
             logging.error("Failed to fetch NBA scoreboard from %s: %s", url, exc)
             return None
 
-    base = "https://cdn.nba.com/static/json/liveData/scoreboard"
-    date_url = f"{base}/scoreboard_{day.strftime('%Y%m%d')}.json"
-    data = _load_json(date_url)
+    data: Optional[Dict[str, Any]] = None
+    source_base: Optional[str] = None
+    today = datetime.date.today()
+    for base, respect_cache in _NBA_SCOREBOARD_BASES:
+        date_url = f"{base}/scoreboard_{day.strftime('%Y%m%d')}.json"
+        data = _load_json(date_url, respect_forbidden_cache=respect_cache)
+        if isinstance(data, dict):
+            source_base = base
+            break
+        if day == today:
+            today_url = f"{base}/todaysScoreboard.json"
+            data = _load_json(today_url, respect_forbidden_cache=respect_cache)
+            if isinstance(data, dict):
+                source_base = base
+                break
 
-    if data is None and day == datetime.date.today():
-        today_url = f"{base}/todaysScoreboard.json"
-        data = _load_json(today_url)
+    if source_base and source_base != _NBA_SCOREBOARD_BASES[0][0]:
+        logging.info(
+            "NBA scoreboard fetched successfully from alternate base %s", source_base
+        )
 
     if not isinstance(data, dict):
         _log_espn_fallback(day)

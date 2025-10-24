@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -69,3 +70,27 @@ def test_api_config_returns_current_config(app_client):
     assert payload["status"] == "ok"
     assert payload["config"]["screens"]["travel"] == 2
     assert json.loads(Path(config_path).read_text())["screens"]["date"] == 0
+
+
+def test_startup_renderer_runs_when_enabled(monkeypatch):
+    calls: list[tuple[bool, bool]] = []
+
+    class FakeRenderer:
+        @staticmethod
+        def render_all_screens(*, sync_screenshots=False, create_archive=True):
+            calls.append((sync_screenshots, create_archive))
+            return 0
+
+    monkeypatch.setitem(sys.modules, "render_all_screens", FakeRenderer)
+
+    previous = admin.app.config.get("TESTING")
+    admin.app.config["TESTING"] = False
+    try:
+        admin._run_startup_renderer()
+    finally:
+        if previous is None:
+            del admin.app.config["TESTING"]
+        else:
+            admin.app.config["TESTING"] = previous
+
+    assert calls == [(True, False)]

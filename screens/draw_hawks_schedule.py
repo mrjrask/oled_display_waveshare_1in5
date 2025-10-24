@@ -651,12 +651,85 @@ def _format_last_date_bottom(game_date_iso: str) -> str:
     return local.strftime("%a %b %-d") if os.name != "nt" else local.strftime("%a %b %#d")
 
 
-def _format_last_bottom_line(game: Dict) -> str:
+def _last_game_result_prefix(game: Dict, feed: Optional[Dict] = None) -> str:
+    """Return "Final", "Final/OT", or "Final/SO" for a completed game."""
+
+    def _norm(value: Optional[str]) -> str:
+        return value.strip().upper() if isinstance(value, str) else ""
+
+    linescore = (game or {}).get("linescore") or {}
+    outcome = (game or {}).get("gameOutcome") or {}
+
+    def _is_shootout(text: str) -> bool:
+        return bool(text) and (text == "SO" or "SHOOTOUT" in text)
+
+    def _is_overtime(text: str) -> bool:
+        return bool(text) and not _is_shootout(text) and ("OT" in text or "OVERT" in text)
+
+    # Shootout overrides any other period information.
+    if linescore.get("hasShootout"):
+        return "Final/SO"
+
+    outcome_period = _norm(outcome.get("lastPeriodType"))
+    if _is_shootout(outcome_period):
+        return "Final/SO"
+
+    # Check for overtime indicators in the schedule payload.
+    period_ord = linescore.get("currentPeriodOrdinal")
+    period_text = _norm(period_ord) if isinstance(period_ord, str) else ""
+    if not period_text and isinstance(period_ord, (int, float)):
+        period_text = f"{int(period_ord)}TH"
+
+    if not period_text:
+        period = (game or {}).get("period") or {}
+        period_text = _norm(period.get("ordinal")) or _norm(period.get("ordinalNum"))
+        if not period_text:
+            period_text = _norm(period.get("periodType"))
+
+    if not period_text and feed:
+        period_text = _norm(feed.get("perOrdinal"))
+
+    if _is_shootout(period_text):
+        return "Final/SO"
+    if _is_overtime(period_text):
+        return "Final/OT"
+
+    if period_text.endswith(("ST", "ND", "RD", "TH")):
+        digits = "".join(ch for ch in period_text if ch.isdigit())
+        if digits:
+            try:
+                if int(digits) >= 4:
+                    return "Final/OT"
+            except ValueError:
+                pass
+
+    period_number = linescore.get("currentPeriod")
+    if period_number is None:
+        period_number = (game or {}).get("period", {}).get("number")
+    try:
+        if int(period_number) >= 4:
+            return "Final/OT"
+    except Exception:
+        pass
+
+    if _is_overtime(outcome_period):
+        return "Final/OT"
+
+    return "Final"
+
+
+def _format_last_bottom_line(game: Dict, feed: Optional[Dict] = None) -> str:
+    prefix = _last_game_result_prefix(game, feed)
+
     if callable(_MLB_REL_DATE_ONLY):
         official = game.get("officialDate") or (game.get("gameDate") or "")[:10]
-        return _MLB_REL_DATE_ONLY(official)
+        date_str = _MLB_REL_DATE_ONLY(official)
+    else:
+        date_str = _format_last_date_bottom(game.get("gameDate", ""))
 
-    return _format_last_date_bottom(game.get("gameDate", ""))
+    if date_str:
+        return f"{prefix} {date_str}"
+    return prefix
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Next-game helpers (names, local PNG logos, centered bigger logos)
@@ -869,7 +942,7 @@ def draw_last_hawks_game(display, game, transition: bool=False):
     y += title_h
 
     # Reserve bottom for date (in MLB bottom font)
-    bottom_str = _format_last_bottom_line(last_final)
+    bottom_str = _format_last_bottom_line(last_final, feed)
     reserve = (_text_h(d, FONT_BOTTOM) + 2) if bottom_str else 0
 
     # Scoreboard

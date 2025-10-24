@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "screens_config.json")
 IMAGES_DIR = os.path.join(SCRIPT_DIR, "images")
+SCREENSHOT_DIR = os.path.join(SCRIPT_DIR, "screenshots")
 ARCHIVE_DIR = os.path.join(SCRIPT_DIR, "screenshot_archive")
 
 
@@ -211,6 +212,26 @@ def _write_zip(assets: Iterable[Tuple[str, Image.Image]], timestamp: _dt.datetim
     return zip_path
 
 
+def _write_screenshots(
+    assets: Iterable[Tuple[str, Image.Image]], timestamp: _dt.datetime
+) -> list[str]:
+    os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+    saved: list[str] = []
+    ts_suffix = timestamp.strftime("%Y%m%d_%H%M%S")
+
+    for screen_id, image in assets:
+        folder = _sanitize_directory_name(screen_id)
+        prefix = _sanitize_filename_prefix(screen_id)
+        target_dir = os.path.join(SCREENSHOT_DIR, folder)
+        os.makedirs(target_dir, exist_ok=True)
+        filename = f"{prefix}_{ts_suffix}.png"
+        path = os.path.join(target_dir, filename)
+        image.save(path)
+        saved.append(path)
+
+    return saved
+
+
 def _suppress_animation_delay():
     if utils is None:
         return lambda: None
@@ -223,7 +244,9 @@ def _suppress_animation_delay():
     return restore
 
 
-def render_all_screens() -> int:
+def render_all_screens(
+    *, sync_screenshots: bool = False, create_archive: bool = True
+) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)-8s %(message)s",
@@ -287,9 +310,19 @@ def render_all_screens() -> int:
         logging.error("No screen images were produced.")
         return 1
 
-    archive_path = _write_zip(assets, now)
-    logging.info("Archived %d screen(s) → %s", len(assets), archive_path)
-    print(archive_path)
+    if sync_screenshots:
+        saved = _write_screenshots(assets, now)
+        logging.info(
+            "Updated %d screenshot(s) in %s", len(saved), SCREENSHOT_DIR
+        )
+
+    if create_archive:
+        archive_path = _write_zip(assets, now)
+        logging.info("Archived %d screen(s) → %s", len(assets), archive_path)
+        print(archive_path)
+    elif not create_archive and not sync_screenshots:
+        logging.info("Rendered %d screen(s) (no outputs written)", len(assets))
+
     return 0
 
 

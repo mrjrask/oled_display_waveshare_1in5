@@ -36,13 +36,21 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
 - Packages (install via apt / pip):
   ```bash
   sudo apt-get update
-  sudo apt-get install -y python3-pip python3-pil libopenjp2-7 libtiff5
-  pip3 install pillow requests colorama spidev gpiozero
+  sudo apt-get install -y \
+      python3-venv python3-pip python3-dev python3-opencv \
+      build-essential libjpeg-dev libopenblas0 libopenblas-dev \
+      libopenjp2-7-dev libtiff5-dev libcairo2-dev libpango1.0-dev \
+      libgdk-pixbuf2.0-xlib-dev libffi-dev network-manager wireless-tools \
+      i2c-tools fonts-dejavu-core libgl1 libx264-dev ffmpeg git
+  pip3 install -r requirements.txt
   ```
   Pillow on current Raspberry Pi OS builds usually includes **WebP** support. If animated WebP is not rendering, upgrade Pillow:
   ```bash
   pip3 install --upgrade pillow
   ```
+  The `bme68x` package is required when using the bundled BME688 air quality sensor helper.
+  Install `adafruit-circuitpython-sht4x` when wiring an Adafruit SHT41 (STEMMA QT).
+  Install `pimoroni-bme280` for the Pimoroni Multi-Sensor Stick's BME280 breakout (shares a board with the LTR559 and LSM6DS3).
 
 ---
 
