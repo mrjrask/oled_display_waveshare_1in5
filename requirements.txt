@@ -12,7 +12,6 @@ spidev
 smbus
 gpiozero
 cairosvg
-lgpio
 rpi.gpio
 colorama
 adafruit-circuitpython-bme280
