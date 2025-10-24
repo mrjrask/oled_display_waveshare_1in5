@@ -49,6 +49,8 @@ A tiny, always‑on scoreboard and info display that runs on a Raspberry Pi and 
   pip3 install --upgrade pillow
   ```
   The `bme68x` package is required when using the bundled BME688 air quality sensor helper.
+  Install `adafruit-circuitpython-sht4x` when wiring an Adafruit SHT41 (STEMMA QT).
+  Install `pimoroni-bme280` for the Pimoroni Multi-Sensor Stick's BME280 breakout (shares a board with the LTR559 and LSM6DS3).
 
 ---
 

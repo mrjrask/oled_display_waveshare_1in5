@@ -6,9 +6,10 @@ waitress
 yfinance 
 numpy
 adafruit-blinka 
-adafruit-circuitpython-bme680 
-spidev 
-smbus 
+adafruit-circuitpython-bme680
+adafruit-circuitpython-sht4x
+spidev
+smbus
 gpiozero
 cairosvg
 lgpio
