@@ -12,7 +12,7 @@ Everything is dynamically sized to fit 128×128 without clipping.
 from __future__ import annotations
 import time
 import logging
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 from PIL import Image, ImageDraw
 import config
@@ -35,7 +35,7 @@ W, H = config.WIDTH, config.HEIGHT
 
 SensorReadings = Dict[str, Optional[float]]
 SensorProbeResult = Tuple[str, Callable[[], SensorReadings]]
-SensorProbeFn = Callable[[Any], Optional[SensorProbeResult]]
+SensorProbeFn = Callable[[Any, Set[int]], Optional[SensorProbeResult]]
 
 
 def _extract_field(data: Any, key: str) -> Optional[float]:
@@ -53,7 +53,10 @@ def _extract_field(data: Any, key: str) -> Optional[float]:
         return None
 
 
-def _probe_adafruit_bme680(i2c: Any) -> SensorProbeResult:
+def _probe_adafruit_bme680(i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
+    if addresses and not addresses.intersection({0x76, 0x77}):
+        return None
+
     import adafruit_bme680  # type: ignore
 
     dev = adafruit_bme680.Adafruit_BME680_I2C(i2c)
@@ -69,7 +72,10 @@ def _probe_adafruit_bme680(i2c: Any) -> SensorProbeResult:
     return "Adafruit BME680", read
 
 
-def _probe_pimoroni_bme68x(_i2c: Any) -> SensorProbeResult:
+def _probe_pimoroni_bme68x(_i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
+    if addresses and not addresses.intersection({0x76, 0x77}):
+        return None
+
     from importlib import import_module
 
     import bme68x  # type: ignore
@@ -132,7 +138,10 @@ def _probe_pimoroni_bme68x(_i2c: Any) -> SensorProbeResult:
     return provider, read
 
 
-def _probe_pimoroni_bme680(_i2c: Any) -> SensorProbeResult:
+def _probe_pimoroni_bme680(_i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
+    if addresses and not addresses.intersection({0x76, 0x77}):
+        return None
+
     from importlib import import_module
 
     try:
@@ -200,7 +209,10 @@ def _probe_pimoroni_bme680(_i2c: Any) -> SensorProbeResult:
     return "Pimoroni BME68X", read
 
 
-def _probe_pimoroni_bme280(_i2c: Any) -> SensorProbeResult:
+def _probe_pimoroni_bme280(_i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
+    if addresses and not addresses.intersection({0x76, 0x77}):
+        return None
+
     import bme280  # type: ignore
 
     dev = bme280.BME280()
@@ -214,7 +226,10 @@ def _probe_pimoroni_bme280(_i2c: Any) -> SensorProbeResult:
     return "Pimoroni BME280", read
 
 
-def _probe_adafruit_bme280(i2c: Any) -> SensorProbeResult:
+def _probe_adafruit_bme280(i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
+    if addresses and not addresses.intersection({0x76, 0x77}):
+        return None
+
     import adafruit_bme280  # type: ignore
 
     dev = adafruit_bme280.Adafruit_BME280_I2C(i2c)
@@ -228,7 +243,10 @@ def _probe_adafruit_bme280(i2c: Any) -> SensorProbeResult:
     return "Adafruit BME280", read
 
 
-def _probe_adafruit_sht4x(i2c: Any) -> SensorProbeResult:
+def _probe_adafruit_sht4x(i2c: Any, addresses: Set[int]) -> Optional[SensorProbeResult]:
+    if addresses and not addresses.intersection({0x44, 0x45}):
+        return None
+
     import adafruit_sht4x  # type: ignore
 
     dev = adafruit_sht4x.SHT4x(i2c)
@@ -248,6 +266,40 @@ def _probe_adafruit_sht4x(i2c: Any) -> SensorProbeResult:
     return "Adafruit SHT41", read
 
 
+def _scan_i2c_addresses(i2c: Any) -> Set[int]:
+    addresses: Set[int] = set()
+
+    if not hasattr(i2c, "scan"):
+        return addresses
+
+    locked = False
+    try:
+        if hasattr(i2c, "try_lock"):
+            for _ in range(5):
+                try:
+                    locked = i2c.try_lock()
+                except Exception:
+                    locked = False
+                if locked:
+                    break
+                time.sleep(0.01)
+        if locked or not hasattr(i2c, "try_lock"):
+            try:
+                addresses = set(i2c.scan())  # type: ignore[arg-type]
+            except Exception as exc:
+                logging.debug("draw_inside: I2C scan failed: %s", exc, exc_info=True)
+        else:
+            logging.debug("draw_inside: could not lock I2C bus for scanning")
+    finally:
+        if locked and hasattr(i2c, "unlock"):
+            try:
+                i2c.unlock()
+            except Exception:
+                pass
+
+    return addresses
+
+
 def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings]]]:
     """Try the available sensor drivers and return the first match."""
 
@@ -261,18 +313,25 @@ def _probe_sensor() -> Tuple[Optional[str], Optional[Callable[[], SensorReadings
         logging.warning("draw_inside: failed to initialise I2C bus: %s", exc)
         return None, None
 
+    addresses = _scan_i2c_addresses(i2c)
+    if addresses:
+        formatted = ", ".join(f"0x{addr:02X}" for addr in sorted(addresses))
+        logging.debug("draw_inside: detected I2C addresses: %s", formatted)
+    else:
+        logging.debug("draw_inside: no I2C addresses detected during scan")
+
     probers: Tuple[SensorProbeFn, ...] = (
         _probe_adafruit_bme680,
         _probe_pimoroni_bme68x,
         _probe_pimoroni_bme680,
+        _probe_adafruit_sht4x,
         _probe_pimoroni_bme280,
         _probe_adafruit_bme280,
-        _probe_adafruit_sht4x,
     )
 
     for probe in probers:
         try:
-            result = probe(i2c)
+            result = probe(i2c, addresses)
         except ModuleNotFoundError as exc:
             logging.debug("draw_inside: probe %s skipped (module missing): %s", probe.__name__, exc)
             continue
