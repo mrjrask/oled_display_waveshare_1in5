@@ -10,6 +10,7 @@ adafruit-circuitpython-bme680
 adafruit-circuitpython-sht4x
 spidev
 smbus
+lgpio
 gpiozero
 cairosvg
 rpi.gpio
